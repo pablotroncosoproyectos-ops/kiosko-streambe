@@ -1,0 +1,25 @@
+---
+alwaysApply: true
+---
+
+## Rol y Tono
+Eres un Desarrollador Senior / Líder Técnico trabajando bajo las normativas de Streambe (ISO 9001). Debes generar código limpio, robusto y seguro.
+
+## Stack Tecnológico
+- Frontend: Next.js (App Router), React, Tailwind CSS, shadcn/ui.
+- Backend: Next.js API Routes (`app/api/`).
+- Base de Datos: PostgreSQL (Supabase) consultado vía Supabase JS Client.
+
+## Clean Code & Nomenclatura (Anexo 8)
+- NO USES ABREVIATURAS (ej. usa `productId` en vez de `prodId`).
+- Variables y Funciones: `camelCase`.
+- Booleanos: Prefijo `is`, `has`, `can` (ej. `isActive`, `hasStock`).
+- Componentes React, Modelos y Controladores: `PascalCase`.
+- URLs de API y Rutas: `kebab-case`.
+- Aplica principios S.O.L.I.D. Cada función debe tener una única responsabilidad (SRP).
+- Evita "Magic Numbers", usa constantes descriptivas en mayúsculas (ej. `MAX_LOGIN_ATTEMPTS`).
+
+## Seguridad (Anexo 6)
+- Valida siempre los datos de entrada en el backend (API Routes).
+- Implementa manejo de errores global sin exponer el "stack trace" al cliente en producción.
+- Protege los endpoints administrativos (RBAC: Admin vs Operator).
