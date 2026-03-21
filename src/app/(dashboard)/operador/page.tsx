@@ -1,4 +1,6 @@
-const OperadorDashboardPage = (): JSX.Element => {
+import type { ReactElement } from "react";
+
+const OperadorDashboardPage = (): ReactElement => {
   return <main>Operador Dashboard</main>;
 };
 
