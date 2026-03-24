@@ -56,8 +56,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   } catch (error: unknown) {
     if (error instanceof Error) {
-      if (error.message === "Invalid credentials") {
-        return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
+      if (error.message === "Credenciales no válidas") {
+        return NextResponse.json({ message: "Credenciales no válidas" }, { status: 401 });
       }
 
       if (error.message === "Inactive account") {

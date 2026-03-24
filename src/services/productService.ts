@@ -5,6 +5,8 @@ interface ProductDatabaseRow {
   id: string;
   sku: string;
   name: string;
+  category: "DULCE" | "SALADO" | "SNACK" | "BEBIDA" | "FRUTA" | "LIBRERIA";
+  image_url: string | null;
   price: number;
   current_stock: number;
   is_active: boolean;
@@ -14,6 +16,8 @@ interface ProductDatabaseRow {
 export interface ProductCreationPayload {
   name: string;
   sku: string;
+  category: "DULCE" | "SALADO" | "SNACK" | "BEBIDA" | "FRUTA" | "LIBRERIA";
+  imageUrl: string | null;
   price: number;
   currentStock: number;
   isActive: boolean;
@@ -22,6 +26,8 @@ export interface ProductCreationPayload {
 export interface ProductUpdatePayload {
   name?: string;
   sku?: string;
+  category?: "DULCE" | "SALADO" | "SNACK" | "BEBIDA" | "FRUTA" | "LIBRERIA";
+  imageUrl?: string | null;
   price?: number;
   currentStock?: number;
   isActive?: boolean;
@@ -32,6 +38,8 @@ function mapDatabaseRowToProduct(row: ProductDatabaseRow): Product {
     id: row.id,
     sku: typeof row.sku === "string" ? row.sku : "",
     name: row.name,
+    category: row.category,
+    imageUrl: row.image_url,
     price: row.price,
     currentStock: row.current_stock,
     isActive: row.is_active,
@@ -78,7 +86,7 @@ export async function listAllProducts(
     await supabaseServerClient
       .from("products")
       .select(
-        "id, sku, name, price, current_stock, is_active, created_at",
+        "id, sku, name, category, image_url, price, current_stock, is_active, created_at",
       )
       .order("created_at", { ascending: false });
 
@@ -111,12 +119,14 @@ export async function createProduct(
       .insert({
         name: trimmedProductName,
         sku: normalizedSku,
+        category: productCreationPayload.category,
+        image_url: productCreationPayload.imageUrl,
         price: productCreationPayload.price,
         current_stock: productCreationPayload.currentStock,
         is_active: productCreationPayload.isActive,
       })
       .select(
-        "id, sku, name, price, current_stock, is_active, created_at",
+        "id, sku, name, category, image_url, price, current_stock, is_active, created_at",
       )
       .single();
 
@@ -140,7 +150,7 @@ export async function updateProductByIdentifier(
     );
   }
 
-  const databaseUpdatePayload: Record<string, string | number | boolean> = {};
+  const databaseUpdatePayload: Record<string, string | number | boolean | null> = {};
 
   if (typeof productUpdatePayload.name === "string") {
     const trimmedName = productUpdatePayload.name.trim();
@@ -152,6 +162,12 @@ export async function updateProductByIdentifier(
 
   if (typeof productUpdatePayload.sku === "string") {
     databaseUpdatePayload.sku = productUpdatePayload.sku.trim();
+  }
+  if (typeof productUpdatePayload.category === "string") {
+    databaseUpdatePayload.category = productUpdatePayload.category;
+  }
+  if (typeof productUpdatePayload.imageUrl === "string" || productUpdatePayload.imageUrl === null) {
+    databaseUpdatePayload.image_url = productUpdatePayload.imageUrl;
   }
 
   if (typeof productUpdatePayload.price === "number") {
@@ -176,7 +192,7 @@ export async function updateProductByIdentifier(
       .update(databaseUpdatePayload)
       .eq("id", productIdentifier)
       .select(
-        "id, sku, name, price, current_stock, is_active, created_at",
+        "id, sku, name, category, image_url, price, current_stock, is_active, created_at",
       )
       .single();
 

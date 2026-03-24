@@ -46,7 +46,7 @@ const LoginPage = (): ReactElement => {
 
       if (!response.ok) {
         setErrorMessage(
-          loginResponseBody.message || "Unable to authenticate user",
+          loginResponseBody.message || "No se puede autenticar al usuario",
         );
         return;
       }
@@ -57,7 +57,7 @@ const LoginPage = (): ReactElement => {
 
       router.push(targetDashboardPath);
     } catch {
-      setErrorMessage("Unexpected authentication error");
+      setErrorMessage("Error de autenticación inesperado");
     } finally {
       setIsSubmitting(false);
     }

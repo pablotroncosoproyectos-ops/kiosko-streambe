@@ -11,6 +11,8 @@ export interface Product {
   id: string;
   sku: string;
   name: string;
+  category: "DULCE" | "SALADO" | "SNACK" | "BEBIDA" | "FRUTA" | "LIBRERIA";
+  imageUrl: string | null;
   price: number;
   currentStock: number;
   isActive: boolean;
@@ -30,7 +32,7 @@ export interface SalesSession {
 export interface Sale {
   id: string;
   sessionId: string;
-  paymentMethod: "CASH" | "TRANSFER" | "QR";
+  paymentMethod: "CASH" | "DEBIT" | "TRANSFER" | "QR";
   totalPrice: number;
   createdAt: string;
 }

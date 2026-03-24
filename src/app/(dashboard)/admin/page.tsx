@@ -24,10 +24,35 @@ interface SingleProductApiResponse {
   message?: string;
 }
 
+interface MeApiResponse {
+  userProfile?: {
+    fullName: string;
+  };
+  message?: string;
+}
+
+const PRODUCT_CATEGORIES = [
+  "DULCE",
+  "SALADO",
+  "SNACK",
+  "BEBIDA",
+  "FRUTA",
+  "LIBRERIA",
+] as const;
+
+function formatArgentinaDateTime(isoDateString: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(isoDateString));
+}
+
 const AdminDashboardPage = (): ReactElement => {
   const [productList, setProductList] = useState<Product[]>([]);
   const [isLoadingProductList, setIsLoadingProductList] =
     useState<boolean>(true);
+  const [loggedInUserFullName, setLoggedInUserFullName] = useState<string>("");
   const [productSearchQuery, setProductSearchQuery] = useState<string>("");
   const [productFormModalMode, setProductFormModalMode] =
     useState<ProductFormModalMode>("closed");
@@ -37,6 +62,9 @@ const AdminDashboardPage = (): ReactElement => {
 
   const [productNameInput, setProductNameInput] = useState<string>("");
   const [productSkuInput, setProductSkuInput] = useState<string>("");
+  const [productCategoryInput, setProductCategoryInput] =
+    useState<Product["category"]>("SNACK");
+  const [productImageUrlInput, setProductImageUrlInput] = useState<string>("");
   const [productPriceInput, setProductPriceInput] = useState<string>("");
   const [productCurrentStockInput, setProductCurrentStockInput] =
     useState<string>("");
@@ -57,7 +85,10 @@ const AdminDashboardPage = (): ReactElement => {
     return productList.filter((product) => {
       const nameMatches = product.name.toLowerCase().includes(normalizedSearch);
       const skuMatches = product.sku.toLowerCase().includes(normalizedSearch);
-      return nameMatches || skuMatches;
+      const categoryMatches = product.category
+        .toLowerCase()
+        .includes(normalizedSearch);
+      return nameMatches || skuMatches || categoryMatches;
     });
   }, [productList, productSearchQuery]);
 
@@ -98,6 +129,28 @@ const AdminDashboardPage = (): ReactElement => {
   }, [loadProductListFromServer]);
 
   useEffect(() => {
+    const loadLoggedInUserProfile = async (): Promise<void> => {
+      try {
+        const response = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include",
+        });
+        const responseBody = (await response.json()) as MeApiResponse;
+        if (response.status === 401) {
+          window.location.assign("/login");
+          return;
+        }
+        if (response.ok && responseBody.userProfile) {
+          setLoggedInUserFullName(responseBody.userProfile.fullName);
+        }
+      } catch {
+        // Keep dashboard usable even if profile request fails.
+      }
+    };
+    void loadLoggedInUserProfile();
+  }, []);
+
+  useEffect(() => {
     if (productFormModalMode !== "create") {
       return;
     }
@@ -115,6 +168,8 @@ const AdminDashboardPage = (): ReactElement => {
     setEditingProductIdentifier(null);
     setProductNameInput("");
     setProductSkuInput("");
+    setProductCategoryInput("SNACK");
+    setProductImageUrlInput("");
     setProductPriceInput("");
     setProductCurrentStockInput("");
     setIsProductActive(true);
@@ -126,6 +181,8 @@ const AdminDashboardPage = (): ReactElement => {
     setEditingProductIdentifier(product.id);
     setProductNameInput(product.name);
     setProductSkuInput(product.sku);
+    setProductCategoryInput(product.category);
+    setProductImageUrlInput(product.imageUrl ?? "");
     setProductPriceInput(String(product.price));
     setProductCurrentStockInput(String(product.currentStock));
     setIsProductActive(product.isActive);
@@ -137,6 +194,14 @@ const AdminDashboardPage = (): ReactElement => {
     setProductFormModalMode("closed");
     setEditingProductIdentifier(null);
     setFormErrorMessage("");
+  }
+
+  async function handleLogout(): Promise<void> {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+    window.location.assign("/login");
   }
 
   async function handleProductFormSubmit(
@@ -181,6 +246,11 @@ const AdminDashboardPage = (): ReactElement => {
           body: JSON.stringify({
             name: trimmedProductName,
             sku: productSkuInput,
+            category: productCategoryInput,
+            imageUrl:
+              productImageUrlInput.trim().length > 0
+                ? productImageUrlInput.trim()
+                : null,
             price: parsedPrice,
             currentStock: parsedCurrentStock,
             isActive: isProductActive,
@@ -219,6 +289,11 @@ const AdminDashboardPage = (): ReactElement => {
             body: JSON.stringify({
               name: trimmedProductName,
               sku: productSkuInput,
+              category: productCategoryInput,
+              imageUrl:
+                productImageUrlInput.trim().length > 0
+                  ? productImageUrlInput.trim()
+                  : null,
               price: parsedPrice,
               currentStock: parsedCurrentStock,
               isActive: isProductActive,
@@ -305,17 +380,31 @@ const AdminDashboardPage = (): ReactElement => {
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Gestión de inventario y catálogo
               </p>
+              {loggedInUserFullName.length > 0 ? (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Usuario: {loggedInUserFullName}
+                </p>
+              ) : null}
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateProductModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            <Plus className="size-4" />
-            Nuevo producto
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openCreateProductModal}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              <Plus className="size-4" />
+              Nuevo producto
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="inline-flex items-center justify-center rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
         </header>
 
         {pageErrorMessage.length > 0 ? (
@@ -338,7 +427,7 @@ const AdminDashboardPage = (): ReactElement => {
                 type="search"
                 value={productSearchQuery}
                 onChange={(event) => setProductSearchQuery(event.target.value)}
-                placeholder="Buscar por nombre o código…"
+                placeholder="Buscar por nombre, categoría o código…"
                 className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
               />
             </div>
@@ -350,8 +439,10 @@ const AdminDashboardPage = (): ReactElement => {
                 <tr>
                   <th className="px-4 py-3 font-medium">Nombre</th>
                   <th className="px-4 py-3 font-medium">Código de barras</th>
+                  <th className="px-4 py-3 font-medium">Categoría</th>
                   <th className="px-4 py-3 font-medium">Precio</th>
                   <th className="px-4 py-3 font-medium">Stock</th>
+                  <th className="px-4 py-3 font-medium">Creado</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
                   <th className="px-4 py-3 font-medium text-right">Acciones</th>
                 </tr>
@@ -360,7 +451,7 @@ const AdminDashboardPage = (): ReactElement => {
                 {isLoadingProductList ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-8 text-center text-zinc-500"
                     >
                       Cargando productos…
@@ -369,7 +460,7 @@ const AdminDashboardPage = (): ReactElement => {
                 ) : filteredProductList.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="px-4 py-8 text-center text-zinc-500"
                     >
                       No hay productos que coincidan con la búsqueda.
@@ -388,10 +479,22 @@ const AdminDashboardPage = (): ReactElement => {
                         {product.sku.length > 0 ? product.sku : "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                        {product.price.toFixed(2)}
+                        {product.category}
                       </td>
                       <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                        {product.price.toFixed(2)}
+                      </td>
+                      <td
+                        className={
+                          product.currentStock < 5
+                            ? "px-4 py-3 font-semibold text-red-600 dark:text-red-400"
+                            : "px-4 py-3 text-zinc-700 dark:text-zinc-300"
+                        }
+                      >
                         {product.currentStock}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                        {formatArgentinaDateTime(product.createdAt)}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -482,6 +585,36 @@ const AdminDashboardPage = (): ReactElement => {
                   onChange={(event) => setProductNameInput(event.target.value)}
                   className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
                   required
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Categoría <span className="text-red-500">*</span>
+                </span>
+                <select
+                  value={productCategoryInput}
+                  onChange={(event) =>
+                    setProductCategoryInput(event.target.value as Product["category"])
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
+                >
+                  {PRODUCT_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  URL de imagen
+                </span>
+                <input
+                  type="url"
+                  value={productImageUrlInput}
+                  onChange={(event) => setProductImageUrlInput(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
+                  placeholder="https://..."
                 />
               </label>
 

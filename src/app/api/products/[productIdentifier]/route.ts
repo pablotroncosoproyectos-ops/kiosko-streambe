@@ -19,9 +19,12 @@ function buildSanitizedErrorResponse(error: unknown): NextResponse {
     return NextResponse.json({ message: "Authentication required" }, { status: 401 });
   }
 
-  if (errorMessage === "Administrator role required") {
+  if (
+    errorMessage === "Administrator role required" ||
+    errorMessage === "Authorized role required"
+  ) {
     return NextResponse.json(
-      { message: "Administrator role required" },
+      { message: "Authorized role required" },
       { status: 403 },
     );
   }
@@ -97,6 +100,25 @@ function parseProductUpdatePayload(
       return null;
     }
     productUpdatePayload.price = parsedBody.price;
+  }
+  if ("category" in parsedBody) {
+    if (
+      parsedBody.category !== "DULCE" &&
+      parsedBody.category !== "SALADO" &&
+      parsedBody.category !== "SNACK" &&
+      parsedBody.category !== "BEBIDA" &&
+      parsedBody.category !== "FRUTA" &&
+      parsedBody.category !== "LIBRERIA"
+    ) {
+      return null;
+    }
+    productUpdatePayload.category = parsedBody.category;
+  }
+  if ("imageUrl" in parsedBody) {
+    if (!(typeof parsedBody.imageUrl === "string" || parsedBody.imageUrl === null)) {
+      return null;
+    }
+    productUpdatePayload.imageUrl = parsedBody.imageUrl;
   }
 
   if ("currentStock" in parsedBody) {

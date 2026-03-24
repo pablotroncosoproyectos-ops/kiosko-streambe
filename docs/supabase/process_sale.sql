@@ -9,6 +9,7 @@
 
 create or replace function public.process_sale(
   p_payment_method text,
+  p_session_type text,
   p_sale_items jsonb
 )
 returns table (sale_id uuid, total_sale_amount numeric)
@@ -32,8 +33,12 @@ begin
     raise exception 'Authentication required';
   end if;
 
-  if p_payment_method not in ('CASH', 'TRANSFER', 'QR') then
+  if p_payment_method not in ('CASH', 'DEBIT', 'TRANSFER', 'QR') then
     raise exception 'Invalid payment method';
+  end if;
+
+  if p_session_type not in ('RECREO', 'VENTA_LIBRE') then
+    raise exception 'Invalid automatic sale category';
   end if;
 
   if p_sale_items is null or jsonb_typeof(p_sale_items) <> 'array' or jsonb_array_length(p_sale_items) = 0 then
@@ -76,19 +81,30 @@ begin
     into active_sales_session_identifier
     from public.sales_sessions
     where user_id = authenticated_user_identifier
-      and session_type = 'RECREO'
+      and session_type = p_session_type
       and status = 'OPEN'
     order by started_at desc
     limit 1;
 
   if active_sales_session_identifier is null then
     insert into public.sales_sessions (user_id, session_type, status, total_amount, started_at)
-    values (authenticated_user_identifier, 'RECREO', 'OPEN', 0, now())
+    values (
+      authenticated_user_identifier,
+      p_session_type,
+      'OPEN',
+      0,
+      timezone('America/Argentina/Buenos_Aires', now())
+    )
     returning id into active_sales_session_identifier;
   end if;
 
   insert into public.sales (session_id, payment_method, total_price, created_at)
-  values (active_sales_session_identifier, p_payment_method, computed_total_sale_amount, now())
+  values (
+    active_sales_session_identifier,
+    p_payment_method,
+    computed_total_sale_amount,
+    timezone('America/Argentina/Buenos_Aires', now())
+  )
   returning id into created_sale_identifier;
 
   for sale_item_record in select * from jsonb_array_elements(p_sale_items)

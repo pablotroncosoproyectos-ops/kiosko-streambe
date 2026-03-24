@@ -19,14 +19,14 @@ function validateLoginCredentials(loginCredentials: LoginCredentials): void {
     typeof loginCredentials.email !== "string" ||
     sanitizeEmailAddress(loginCredentials.email).length === 0
   ) {
-    throw new Error("Invalid credentials");
+    throw new Error("Credenciales no válidas");
   }
 
   if (
     typeof loginCredentials.password !== "string" ||
     loginCredentials.password.trim().length === 0
   ) {
-    throw new Error("Invalid credentials");
+    throw new Error("Credenciales no válidas");
   }
 }
 
@@ -39,7 +39,7 @@ function mapUserDatabaseRowToUserProfile(userDatabaseRow: {
   created_at: string;
 }): User {
   if (userDatabaseRow.role !== "ADMIN" && userDatabaseRow.role !== "OPERATOR") {
-    throw new Error("Invalid credentials");
+    throw new Error("Credenciales no válidas");
   }
 
   return {
@@ -64,7 +64,7 @@ async function fetchUserProfileUsingSupabaseClient(
       .single();
 
   if (userProfileError || !userDatabaseRow) {
-    throw new Error("Invalid credentials");
+    throw new Error("Credenciales no válidas");
   }
 
   return mapUserDatabaseRowToUserProfile(
@@ -103,7 +103,7 @@ export async function loginWithEmailAndPassword(
     !authenticationData.user ||
     !authenticationData.session
   ) {
-    throw new Error("Invalid credentials");
+    throw new Error("Credenciales no válidas");
   }
 
   const userProfile = await fetchUserProfileUsingSupabaseClient(

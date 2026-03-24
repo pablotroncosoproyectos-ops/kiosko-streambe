@@ -3,6 +3,14 @@ import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type UserRole = "ADMIN" | "OPERATOR";
+interface AuthenticatedUserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+}
 
 function getSupabasePublicConfiguration(): {
   supabaseUrl: string;
@@ -92,4 +100,39 @@ export async function requireAuthenticatedAuthorizedSupabaseClient(
   }
 
   return supabaseServerClient;
+}
+
+export async function getAuthenticatedUserProfile(): Promise<AuthenticatedUserProfile> {
+  const supabaseServerClient = await createSupabaseServerClientUsingCookies();
+  const { data: authenticationData, error: authenticationError } =
+    await supabaseServerClient.auth.getUser();
+
+  if (authenticationError || !authenticationData.user) {
+    throw new Error("Authentication required");
+  }
+
+  const { data: authenticatedUserProfileRow, error: authenticatedUserProfileError } =
+    await supabaseServerClient
+      .from("users")
+      .select("id, email, full_name, role, is_active, created_at")
+      .eq("id", authenticationData.user.id)
+      .single();
+
+  if (authenticatedUserProfileError || !authenticatedUserProfileRow) {
+    throw new Error("Authentication required");
+  }
+
+  const role = authenticatedUserProfileRow.role as UserRole;
+  if (role !== "ADMIN" && role !== "OPERATOR") {
+    throw new Error("Authentication required");
+  }
+
+  return {
+    id: authenticatedUserProfileRow.id,
+    email: authenticatedUserProfileRow.email,
+    fullName: authenticatedUserProfileRow.full_name,
+    role,
+    isActive: authenticatedUserProfileRow.is_active,
+    createdAt: authenticatedUserProfileRow.created_at,
+  };
 }

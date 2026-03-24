@@ -77,6 +77,17 @@ function isValidProductCreationRequestBody(
 
   const hasValidName =
     typeof parsedBody.name === "string" && parsedBody.name.trim().length > 0;
+  const hasValidCategory =
+    parsedBody.category === "DULCE" ||
+    parsedBody.category === "SALADO" ||
+    parsedBody.category === "SNACK" ||
+    parsedBody.category === "BEBIDA" ||
+    parsedBody.category === "FRUTA" ||
+    parsedBody.category === "LIBRERIA";
+  const hasValidImageUrl =
+    parsedBody.imageUrl === undefined ||
+    parsedBody.imageUrl === null ||
+    typeof parsedBody.imageUrl === "string";
   const hasValidPrice =
     typeof parsedBody.price === "number" && Number.isFinite(parsedBody.price);
   const hasValidCurrentStock =
@@ -91,6 +102,8 @@ function isValidProductCreationRequestBody(
 
   return (
     hasValidName &&
+    hasValidCategory &&
+    hasValidImageUrl &&
     hasValidPrice &&
     hasValidCurrentStock &&
     hasValidIsActive &&
@@ -130,6 +143,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     const productCreationPayload: ProductCreationPayload = {
       name: requestBody.name,
       sku: skuFromRequest,
+      category: requestBody.category,
+      imageUrl:
+        typeof requestBody.imageUrl === "string" || requestBody.imageUrl === null
+          ? requestBody.imageUrl
+          : null,
       price: requestBody.price,
       currentStock: requestBody.currentStock,
       isActive: requestBody.isActive,

@@ -7,7 +7,8 @@ export interface SaleItemInput {
 
 export interface ProcessSalePayload {
   saleItemsList: SaleItemInput[];
-  paymentMethod: "CASH" | "TRANSFER" | "QR";
+  paymentMethod: "CASH" | "DEBIT" | "TRANSFER" | "QR";
+  automaticSaleCategory: "RECREO" | "VENTA_LIBRE";
 }
 
 export interface ProcessSaleResult {
@@ -15,14 +16,22 @@ export interface ProcessSaleResult {
   totalSaleAmount: number;
 }
 
-interface ProcessSaleRpcRow {
-  sale_id: string;
-  total_sale_amount: number;
+interface ProcessSaleRpcObject {
+  sale_id?: string;
+  total?: number;
+  total_sale_amount?: number;
 }
 
 function validateProcessSalePayload(processSalePayload: ProcessSalePayload): void {
+  if (
+    processSalePayload.automaticSaleCategory !== "RECREO" &&
+    processSalePayload.automaticSaleCategory !== "VENTA_LIBRE"
+  ) {
+    throw new Error("Categoría de venta automática inválida");
+  }
+
   if (!Array.isArray(processSalePayload.saleItemsList) || processSalePayload.saleItemsList.length === 0) {
-    throw new Error("Sale items list is required");
+    throw new Error("La lista de artículos es requerida");
   }
 
   for (const saleItem of processSalePayload.saleItemsList) {
@@ -30,7 +39,7 @@ function validateProcessSalePayload(processSalePayload: ProcessSalePayload): voi
       typeof saleItem.productIdentifier !== "string" ||
       saleItem.productIdentifier.trim().length === 0
     ) {
-      throw new Error("Invalid sale item product identifier");
+      throw new Error("Identificador de producto inválido");
     }
 
     if (
@@ -38,7 +47,7 @@ function validateProcessSalePayload(processSalePayload: ProcessSalePayload): voi
       !Number.isInteger(saleItem.quantity) ||
       saleItem.quantity <= 0
     ) {
-      throw new Error("Invalid sale item quantity");
+      throw new Error("Cantidad de artículo inválida");
     }
   }
 }
@@ -49,36 +58,52 @@ export async function processSale(
 ): Promise<ProcessSaleResult> {
   validateProcessSalePayload(processSalePayload);
 
-  const { data: processSaleData, error: processSaleError } = await supabaseServerClient.rpc(
+  const paymentMethod = processSalePayload.paymentMethod;
+  const sessionType = processSalePayload.automaticSaleCategory;
+  const saleItems = processSalePayload.saleItemsList.map((saleItem) => ({
+    product_id: saleItem.productIdentifier,
+    quantity: saleItem.quantity,
+  }));
+
+  const { data, error: processSaleError } = await supabaseServerClient.rpc(
     "process_sale",
     {
-      p_payment_method: processSalePayload.paymentMethod,
-      p_sale_items: processSalePayload.saleItemsList.map((saleItem) => ({
-        product_id: saleItem.productIdentifier,
-        quantity: saleItem.quantity,
-      })),
+      p_payment_method: paymentMethod,
+      p_session_type: sessionType,
+      p_sale_items: saleItems,
     },
   );
 
   if (processSaleError) {
     const rpcErrorMessage = processSaleError.message.toLowerCase();
     if (rpcErrorMessage.includes("insufficient stock")) {
-      throw new Error("Insufficient stock");
+      throw new Error("Stock insuficiente");
     }
-    throw new Error("Unable to process sale");
+    if (rpcErrorMessage.includes("invalid payment method")) {
+      throw new Error("Método de pago inválido");
+    }
+    if (rpcErrorMessage.includes("invalid automatic sale category")) {
+      throw new Error("Categoría de venta automática inválida");
+    }
+    throw new Error("No se pudo procesar la venta");
   }
 
-  const processSaleRows = processSaleData as ProcessSaleRpcRow[] | null;
-  const processSaleRow = Array.isArray(processSaleRows)
-    ? processSaleRows[0]
-    : (processSaleData as ProcessSaleRpcRow | null);
+  const processSaleObject = data as ProcessSaleRpcObject | null;
+  if (!processSaleObject || typeof processSaleObject.sale_id !== "string") {
+    throw new Error("No se pudo procesar la venta");
+  }
 
-  if (!processSaleRow || typeof processSaleRow.sale_id !== "string") {
-    throw new Error("Unable to process sale");
+  const totalSaleAmount =
+    typeof processSaleObject.total === "number"
+      ? processSaleObject.total
+      : processSaleObject.total_sale_amount;
+
+  if (typeof totalSaleAmount !== "number") {
+    throw new Error("No se pudo procesar la venta");
   }
 
   return {
-    saleIdentifier: processSaleRow.sale_id,
-    totalSaleAmount: Number(processSaleRow.total_sale_amount),
+    saleIdentifier: processSaleObject.sale_id,
+    totalSaleAmount: Number(totalSaleAmount),
   };
 }
