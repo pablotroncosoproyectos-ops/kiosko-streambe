@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+type UserRole = "ADMIN" | "OPERATOR";
+
 function getSupabasePublicConfiguration(): {
   supabaseUrl: string;
   supabaseAnonymousPublicKey: string;
@@ -50,6 +52,12 @@ export async function createSupabaseServerClientUsingCookies(): Promise<Supabase
  * Returns a Supabase server client only if the current user is an active administrator.
  */
 export async function requireAuthenticatedAdministratorSupabaseClient(): Promise<SupabaseClient> {
+  return requireAuthenticatedAuthorizedSupabaseClient(["ADMIN"]);
+}
+
+export async function requireAuthenticatedAuthorizedSupabaseClient(
+  allowedRoles: UserRole[],
+): Promise<SupabaseClient> {
   const supabaseServerClient = await createSupabaseServerClientUsingCookies();
 
   const { data: authenticationData, error: authenticationError } =
@@ -61,7 +69,7 @@ export async function requireAuthenticatedAdministratorSupabaseClient(): Promise
 
   const authenticatedUserIdentifier = authenticationData.user.id;
 
-  const { data: administratorProfile, error: administratorProfileError } =
+  const { data: authenticatedUserProfile, error: authenticatedUserProfileError } =
     await supabaseServerClient
       .from("users")
       .select("role, is_active")
@@ -69,12 +77,18 @@ export async function requireAuthenticatedAdministratorSupabaseClient(): Promise
       .single();
 
   if (
-    administratorProfileError ||
-    !administratorProfile ||
-    administratorProfile.role !== "ADMIN" ||
-    !administratorProfile.is_active
+    authenticatedUserProfileError ||
+    !authenticatedUserProfile ||
+    !authenticatedUserProfile.is_active
   ) {
-    throw new Error("Administrator role required");
+    throw new Error("Authentication required");
+  }
+
+  const userRole = authenticatedUserProfile.role as UserRole;
+  const isRoleAllowed = allowedRoles.includes(userRole);
+
+  if (!isRoleAllowed) {
+    throw new Error("Authorized role required");
   }
 
   return supabaseServerClient;

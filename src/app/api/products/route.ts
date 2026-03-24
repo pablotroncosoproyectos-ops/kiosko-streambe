@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAuthenticatedAdministratorSupabaseClient } from "@/lib/supabase-server-route";
+import {
+  requireAuthenticatedAdministratorSupabaseClient,
+  requireAuthenticatedAuthorizedSupabaseClient,
+} from "@/lib/supabase-server-route";
 import {
   createProduct,
   listAllProducts,
@@ -20,9 +23,9 @@ function buildSanitizedErrorResponse(error: unknown): NextResponse {
     return NextResponse.json({ message: "Authentication required" }, { status: 401 });
   }
 
-  if (errorMessage === "Administrator role required") {
+  if (errorMessage === "Administrator role required" || errorMessage === "Authorized role required") {
     return NextResponse.json(
-      { message: "Administrator role required" },
+      { message: "Authorized role required" },
       { status: 403 },
     );
   }
@@ -98,7 +101,7 @@ function isValidProductCreationRequestBody(
 export async function GET(): Promise<NextResponse> {
   try {
     const supabaseServerClient =
-      await requireAuthenticatedAdministratorSupabaseClient();
+      await requireAuthenticatedAuthorizedSupabaseClient(["ADMIN", "OPERATOR"]);
     const products = await listAllProducts(supabaseServerClient);
 
     return NextResponse.json({ products }, { status: 200 });
