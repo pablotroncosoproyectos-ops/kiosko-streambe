@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -9,7 +10,15 @@ import {
   type FormEvent,
   type ReactElement,
 } from "react";
-import { Edit, Package, Plus, Search, Trash } from "lucide-react";
+import {
+  Edit,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Plus,
+  Search,
+  Trash,
+} from "lucide-react";
 import type { Product } from "@/types/database";
 
 type ProductFormModalMode = "closed" | "create" | "edit";
@@ -366,11 +375,11 @@ const AdminDashboardPage = (): ReactElement => {
   const isProductFormModalOpen = productFormModalMode !== "closed";
 
   return (
-    <main className="min-h-full bg-slate-100 dark:bg-zinc-950 px-4 py-8">
+    <main className="min-h-full bg-slate-50 px-4 py-8 dark:bg-zinc-950">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-12 items-center justify-center rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex size-12 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <Package className="size-6 text-zinc-700 dark:text-zinc-200" />
             </div>
             <div>
@@ -388,7 +397,14 @@ const AdminDashboardPage = (): ReactElement => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              <LayoutDashboard className="size-4" aria-hidden />
+              Dashboard de Informes
+            </Link>
             <button
               type="button"
               onClick={openCreateProductModal}
@@ -400,9 +416,10 @@ const AdminDashboardPage = (): ReactElement => {
             <button
               type="button"
               onClick={() => void handleLogout()}
-              className="inline-flex items-center justify-center rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/40"
             >
-              Cerrar Sesión
+              <LogOut className="size-4" aria-hidden />
+              Cerrar sesión
             </button>
           </div>
         </header>
@@ -416,7 +433,7 @@ const AdminDashboardPage = (): ReactElement => {
           </p>
         ) : null}
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-xl dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
               Productos
@@ -546,7 +563,7 @@ const AdminDashboardPage = (): ReactElement => {
           aria-modal="true"
           aria-labelledby="product-form-title"
         >
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2
               id="product-form-title"
               className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"

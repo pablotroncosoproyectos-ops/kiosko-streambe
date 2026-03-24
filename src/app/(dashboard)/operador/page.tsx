@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   CheckCircle2,
+  LogOut,
   Minus,
   Plus,
   ScanLine,
@@ -485,10 +486,10 @@ const OperadorDashboardPage = (): ReactElement => {
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 dark:bg-zinc-950 p-4 md:p-8">
+    <main className="min-h-screen bg-slate-50 p-4 dark:bg-zinc-950 md:p-8">
       <section className="mx-auto flex max-w-7xl gap-5">
         <div className="flex-1 space-y-5">
-        <header className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <header className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800">
@@ -499,7 +500,7 @@ const OperadorDashboardPage = (): ReactElement => {
                   Modo Recreo
                 </h1>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  Escaneo rapido y venta inmediata
+                  Escaneo rápido y venta inmediata
                 </p>
                 {loggedInUserFullName.length > 0 ? (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -517,19 +518,18 @@ const OperadorDashboardPage = (): ReactElement => {
                 </p>
               </div>
             </div>
-            <div className="rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800">
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Cerrar Sesión
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/40"
+            >
+              <LogOut className="size-4" aria-hidden />
+              Cerrar sesión
+            </button>
           </div>
         </header>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -572,7 +572,7 @@ const OperadorDashboardPage = (): ReactElement => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <form onSubmit={handleScannerSubmit} className="space-y-3">
             <label
               htmlFor="scanned-barcode-input"
@@ -606,7 +606,7 @@ const OperadorDashboardPage = (): ReactElement => {
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Carrito
           </h2>
@@ -706,7 +706,7 @@ const OperadorDashboardPage = (): ReactElement => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-xl dark:border-emerald-900 dark:bg-emerald-950">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <label className="mb-2 block text-sm font-medium text-emerald-800 dark:text-emerald-200">
@@ -749,7 +749,7 @@ const OperadorDashboardPage = (): ReactElement => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <h3 className="mb-3 text-base font-semibold text-zinc-900 dark:text-zinc-100">
             Historial reciente (últimas 10 ventas)
           </h3>
@@ -794,13 +794,13 @@ const OperadorDashboardPage = (): ReactElement => {
         </section>
         </div>
 
-        <aside className="w-full max-w-xs self-start rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-xl dark:border-amber-900 dark:bg-amber-950">
-          <h3 className="mb-3 text-base font-semibold text-amber-900 dark:text-amber-100">
+        <aside className="w-full max-w-xs self-start rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h3 className="mb-3 text-base font-semibold text-zinc-900 dark:text-zinc-100">
             Alertas de stock bajo
           </h3>
           <div className="space-y-2">
             {lowStockProductsList.length === 0 ? (
-              <p className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 No hay productos en nivel crítico.
               </p>
             ) : (
