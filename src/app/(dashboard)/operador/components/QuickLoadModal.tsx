@@ -84,6 +84,7 @@ export function QuickLoadModal({
       <div
         className={`flex max-h-[min(100dvh,100vh)] w-full max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-white/30 bg-white/90 shadow-2xl ring-1 ring-black/5 transition-all duration-300 ease-out dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10 md:max-h-[min(92vh,920px)] md:max-w-7xl ${quickLoadModalBackdropVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.98] opacity-0"}`}
       >
+        {/* HEADER - Se mantiene fijo arriba */}
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 px-6 py-5 dark:border-zinc-800">
           <div className="flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
@@ -111,42 +112,51 @@ export function QuickLoadModal({
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-10 overflow-hidden p-8 lg:grid-cols-12">
-          <CatalogSection
-            catalogBrowseMode={catalogBrowseMode}
-            onCatalogBrowseModeChange={setCatalogBrowseMode}
-            quickLoadSelectedCategory={quickLoadSelectedCategory}
-            onQuickLoadSelectedCategoryChange={setQuickLoadSelectedCategory}
-            catalogUniqueCategoryList={catalogUniqueCategoryList}
-            quickLoadSearchQuery={quickLoadSearchQuery}
-            onQuickLoadSearchQueryChange={setQuickLoadSearchQuery}
-            quickLoadDisplayedProducts={quickLoadDisplayedProducts}
-            isLoadingProductsCatalog={isLoadingProductsCatalog}
-            onAddProductFromQuickLoad={onAddProductFromQuickLoad}
-          />
+        {/* CONTENIDO PRINCIPAL - Con Grid responsivo */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden p-4 md:p-8 lg:grid-cols-12">
+          
+          {/* COLUMNA IZQUIERDA: Catálogo */}
+          <div className="lg:col-span-4 overflow-hidden flex flex-col">
+            <CatalogSection
+              catalogBrowseMode={catalogBrowseMode}
+              onCatalogBrowseModeChange={setCatalogBrowseMode}
+              quickLoadSelectedCategory={quickLoadSelectedCategory}
+              onQuickLoadSelectedCategoryChange={setQuickLoadSelectedCategory}
+              catalogUniqueCategoryList={catalogUniqueCategoryList}
+              quickLoadSearchQuery={quickLoadSearchQuery}
+              onQuickLoadSearchQueryChange={setQuickLoadSearchQuery}
+              quickLoadDisplayedProducts={quickLoadDisplayedProducts}
+              isLoadingProductsCatalog={isLoadingProductsCatalog}
+              onAddProductFromQuickLoad={onAddProductFromQuickLoad}
+            />
+          </div>
 
-          <div className="flex h-full min-h-[600px] flex-col rounded-2xl border border-zinc-200/80 bg-white px-7 py-7 shadow-lg dark:border-zinc-800 dark:bg-zinc-950/40 lg:col-span-8">
-            <CartSection
-              totalSaleAmount={totalSaleAmount}
-              saleItemsList={saleItemsList}
-              pagedCartItems={pagedCartItems}
-              cartPageIndex={cartPageIndex}
-              cartTotalPages={cartTotalPages}
-              setCartPageIndex={setCartPageIndex}
-              onUpdateSaleItemQuantity={onUpdateSaleItemQuantity}
-              onToggleSaleItemUseCostPrice={onToggleSaleItemUseCostPrice}
-              onRemoveSaleItem={onRemoveSaleItem}
-            />
-            <PaymentPanel
-              selectedPaymentMethod={selectedPaymentMethod}
-              setSelectedPaymentMethod={setSelectedPaymentMethod}
-              saleNotesInput={saleNotesInput}
-              setSaleNotesInput={setSaleNotesInput}
-              onClose={onClose}
-              onFinalizeSale={onFinalizeSale}
-              isSubmittingSale={isSubmittingSale}
-              saleItemsCount={saleItemsList.length}
-            />
+          {/* COLUMNA DERECHA: Carrito y Pago */}
+          <div className="flex flex-col rounded-2xl border border-zinc-200/80 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-950/40 lg:col-span-8 overflow-y-auto custom-scrollbar">
+            <div className="p-6 space-y-8">
+              <CartSection
+                totalSaleAmount={totalSaleAmount}
+                saleItemsList={saleItemsList}
+                pagedCartItems={pagedCartItems}
+                cartPageIndex={cartPageIndex}
+                cartTotalPages={cartTotalPages}
+                setCartPageIndex={setCartPageIndex}
+                onUpdateSaleItemQuantity={onUpdateSaleItemQuantity}
+                onToggleSaleItemUseCostPrice={onToggleSaleItemUseCostPrice}
+                onRemoveSaleItem={onRemoveSaleItem}
+              />
+              
+              <PaymentPanel
+                selectedPaymentMethod={selectedPaymentMethod}
+                setSelectedPaymentMethod={setSelectedPaymentMethod}
+                saleNotesInput={saleNotesInput}
+                setSaleNotesInput={setSaleNotesInput}
+                onClose={onClose}
+                onFinalizeSale={onFinalizeSale}
+                isSubmittingSale={isSubmittingSale}
+                saleItemsCount={saleItemsList.length}
+              />
+            </div>
           </div>
         </div>
       </div>

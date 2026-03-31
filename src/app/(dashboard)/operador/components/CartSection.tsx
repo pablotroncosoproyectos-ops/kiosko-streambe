@@ -32,8 +32,8 @@ export function CartSection({
   onRemoveSaleItem,
 }: CartSectionProps): ReactElement {
   return (
-    <section className="min-h-[300px]">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+    <section className="flex flex-col">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
             Carrito en vivo
@@ -44,7 +44,8 @@ export function CartSection({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+        {/* Cabecera del Total fija arriba de la tabla */}
         <div className="flex items-center justify-end border-b border-zinc-200/80 bg-zinc-50/90 px-4 py-2 dark:border-zinc-700 dark:bg-zinc-800/80">
           <div className="rounded-2xl bg-emerald-50 px-3 py-1 text-right dark:bg-emerald-950/40">
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
@@ -55,23 +56,25 @@ export function CartSection({
             </span>
           </div>
         </div>
-        <div>
+
+        {/* CONTENEDOR CON SCROLL: Esto evita que el modal se rompa */}
+        <div className="max-h-[280px] overflow-y-auto">
           <table className="w-full min-w-[280px] border-separate border-spacing-0 text-left text-sm">
             <thead className="sticky top-0 z-10 bg-zinc-100/95 dark:bg-zinc-800/95">
               <tr>
-                <th className="rounded-tl-2xl px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
                   Producto
                 </th>
                 <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
-                  Cantidad
+                  Cant.
                 </th>
                 <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
                   Total
                 </th>
                 <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
-                  Precio costo
+                  Costo
                 </th>
-                <th className="rounded-tr-2xl px-4 py-4 text-right font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 text-right font-semibold text-zinc-700 dark:text-zinc-200">
                   —
                 </th>
               </tr>
@@ -111,22 +114,13 @@ export function CartSection({
                               Math.max(1, saleItem.quantity - 1),
                             )
                           }
-                          className="inline-flex size-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80"
+                          className="inline-flex size-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80"
                         >
-                          <Minus className="size-4" />
+                          <Minus className="size-3" />
                         </button>
-                        <input
-                          type="number"
-                          min={1}
-                          value={saleItem.quantity}
-                          onChange={(event) =>
-                            onUpdateSaleItemQuantity(
-                              saleItem.productIdentifier,
-                              Number.parseInt(event.target.value || "1", 10),
-                            )
-                          }
-                          className="w-12 rounded-xl border border-zinc-200 bg-white px-1 py-2 text-center text-sm font-semibold tabular-nums outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-800"
-                        />
+                        <span className="w-6 text-center font-bold tabular-nums">
+                          {saleItem.quantity}
+                        </span>
                         <button
                           type="button"
                           onClick={() =>
@@ -135,9 +129,9 @@ export function CartSection({
                               saleItem.quantity + 1,
                             )
                           }
-                          className="inline-flex size-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80"
+                          className="inline-flex size-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80"
                         >
-                          <Plus className="size-4" />
+                          <Plus className="size-3" />
                         </button>
                       </div>
                     </td>
@@ -147,20 +141,17 @@ export function CartSection({
                       )}
                     </td>
                     <td className="px-4 py-3.5 align-middle">
-                      <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                        <input
-                          type="checkbox"
-                          checked={saleItem.useCostPrice}
-                          disabled={saleItem.costPrice === null}
-                          onChange={() =>
-                            onToggleSaleItemUseCostPrice(
-                              saleItem.productIdentifier,
-                            )
-                          }
-                          className="size-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        Usar costo
-                      </label>
+                      <input
+                        type="checkbox"
+                        checked={saleItem.useCostPrice}
+                        disabled={saleItem.costPrice === null}
+                        onChange={() =>
+                          onToggleSaleItemUseCostPrice(
+                            saleItem.productIdentifier,
+                          )
+                        }
+                        className="size-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                      />
                     </td>
                     <td className="px-4 py-3.5 text-right align-middle">
                       <button
@@ -168,7 +159,7 @@ export function CartSection({
                         onClick={() =>
                           onRemoveSaleItem(saleItem.productIdentifier)
                         }
-                        className="inline-flex size-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+                        className="inline-flex size-8 items-center justify-center rounded-lg text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/40"
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -181,20 +172,21 @@ export function CartSection({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <span className="font-medium text-zinc-600 dark:text-zinc-400">
-          Página {Math.min(cartPageIndex + 1, cartTotalPages)} / {cartTotalPages}
+      {/* Paginación más compacta */}
+      <div className="mt-3 flex items-center justify-between px-1 text-xs">
+        <span className="font-medium text-zinc-500">
+          Pág. {Math.min(cartPageIndex + 1, cartTotalPages)} de {cartTotalPages}
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <button
             type="button"
             disabled={cartPageIndex <= 0}
             onClick={() =>
               setCartPageIndex((previous) => Math.max(0, previous - 1))
             }
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 font-semibold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-bold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
           >
-            Anterior
+            Ant.
           </button>
           <button
             type="button"
@@ -204,9 +196,9 @@ export function CartSection({
                 Math.min(cartTotalPages - 1, previous + 1),
               )
             }
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 font-semibold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-bold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
           >
-            Siguiente
+            Sig.
           </button>
         </div>
       </div>
