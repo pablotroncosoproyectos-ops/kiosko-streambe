@@ -7,9 +7,6 @@ interface LoginRequestBody {
   password: string;
 }
 
-/**
- * Valida la estructura del cuerpo de la petición de inicio de sesión.
- */
 function isValidLoginRequestBody(
   requestBody: unknown,
 ): requestBody is LoginRequestBody {
@@ -27,10 +24,6 @@ function isValidLoginRequestBody(
   );
 }
 
-/**
- * Manejador de la ruta POST para autenticación de usuarios.
- * Sincroniza las cookies de sesión con NextResponse para habilitar el Middleware.
- */
 export async function POST(request: Request): Promise<NextResponse> {
   try {
     const requestBody: unknown = await request.json();
@@ -47,34 +40,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       password: requestBody.password,
     };
 
-    // 1. Instanciamos el cliente de servidor que maneja cookies
     const supabaseServerClient = await createSupabaseServerClientUsingCookies();
 
-    // 2. Realizamos la autenticación
-    // Nota: loginWithEmailAndPassword internamente debe ejecutar supabase.auth.signInWithPassword
     const authenticatedUserSessionPayload = await loginWithEmailAndPassword(
       supabaseServerClient,
       loginCredentials,
     );
 
-    // 3. Creamos la respuesta base
-    const successResponse = NextResponse.json(
+    return NextResponse.json(
       {
         message: "Login successful",
         userProfile: authenticatedUserSessionPayload.userProfile,
       },
       { status: 200 },
     );
-
-    /**
-     * IMPORTANTE PARA EL MIDDLEWARE:
-     * Al usar createSupabaseServerClientUsingCookies, Supabase intenta escribir en los headers.
-     * Si tu implementación de 'createSupabaseServerClientUsingCookies' usa el patrón oficial 
-     * de Next.js, las cookies ya deberían estar en la cola de la respuesta.
-     */
-
-    return successResponse;
-
   } catch (error: unknown) {
     if (error instanceof Error) {
       if (error.message === "Credenciales no válidas") {

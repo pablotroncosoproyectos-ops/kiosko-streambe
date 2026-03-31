@@ -1,25 +1,24 @@
 "use client";
 
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type FormEvent,
   type ReactElement,
 } from "react";
 import {
-  Edit,
-  LayoutDashboard,
-  LogOut,
+  Banknote,
+  CalendarClock,
   Package,
   Plus,
   Search,
   Trash,
+  X,
 } from "lucide-react";
 import type { Product } from "@/types/database";
+import { ProductFormModal } from "@/components/admin/ProductFormModal";
+import { formatArgentinaPesos } from "@/lib/currencyFormat";
 
 type ProductFormModalMode = "closed" | "create" | "edit";
 
@@ -33,21 +32,25 @@ interface SingleProductApiResponse {
   message?: string;
 }
 
-interface MeApiResponse {
-  userProfile?: {
-    fullName: string;
-  };
+interface SalesSessionsHistoryApiResponse {
+  salesSessionsHistory?: SalesSessionHistoryRow[];
   message?: string;
 }
 
-const PRODUCT_CATEGORIES = [
-  "DULCE",
-  "SALADO",
-  "SNACK",
-  "BEBIDA",
-  "FRUTA",
-  "LIBRERIA",
-] as const;
+interface SalesSessionHistoryRow {
+  sessionIdentifier: string;
+  userIdentifier: string;
+  operatorFullName: string | null;
+  sessionType: string;
+  status: string;
+  totalAmount: number;
+  startedAtIso: string;
+  closedAtIso: string | null;
+  notes: string | null;
+  expectedBalance: number | null;
+  closingBalance: number | null;
+  cashDifference: number | null;
+}
 
 function formatArgentinaDateTime(isoDateString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -61,30 +64,34 @@ const AdminDashboardPage = (): ReactElement => {
   const [productList, setProductList] = useState<Product[]>([]);
   const [isLoadingProductList, setIsLoadingProductList] =
     useState<boolean>(true);
-  const [loggedInUserFullName, setLoggedInUserFullName] = useState<string>("");
   const [productSearchQuery, setProductSearchQuery] = useState<string>("");
   const [productFormModalMode, setProductFormModalMode] =
     useState<ProductFormModalMode>("closed");
-  const [editingProductIdentifier, setEditingProductIdentifier] = useState<
-    string | null
-  >(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const [productNameInput, setProductNameInput] = useState<string>("");
-  const [productSkuInput, setProductSkuInput] = useState<string>("");
-  const [productCategoryInput, setProductCategoryInput] =
-    useState<Product["category"]>("SNACK");
-  const [productImageUrlInput, setProductImageUrlInput] = useState<string>("");
-  const [productPriceInput, setProductPriceInput] = useState<string>("");
-  const [productCurrentStockInput, setProductCurrentStockInput] =
-    useState<string>("");
-  const [isProductActive, setIsProductActive] = useState<boolean>(true);
-
-  const [isSavingProductForm, setIsSavingProductForm] =
-    useState<boolean>(false);
-  const [formErrorMessage, setFormErrorMessage] = useState<string>("");
   const [pageErrorMessage, setPageErrorMessage] = useState<string>("");
+  const [salesSessionsHistory, setSalesSessionsHistory] = useState<
+    SalesSessionHistoryRow[]
+  >([]);
+  const [isLoadingSalesSessionsHistory, setIsLoadingSalesSessionsHistory] =
+    useState<boolean>(true);
+  const [salesSessionsHistoryErrorMessage, setSalesSessionsHistoryErrorMessage] =
+    useState<string>("");
+  const [isProductsPanelOpen, setIsProductsPanelOpen] = useState<boolean>(false);
+  const [isCashClosuresPanelOpen, setIsCashClosuresPanelOpen] =
+    useState<boolean>(false);
+  const [isSessionsHistoryPanelOpen, setIsSessionsHistoryPanelOpen] =
+    useState<boolean>(false);
 
-  const barcodeInputReference = useRef<HTMLInputElement>(null);
+  const cashClosureSessionsOnly = useMemo(() => {
+    return salesSessionsHistory.filter((sessionRow) => {
+      return (
+        sessionRow.closedAtIso !== null &&
+        sessionRow.cashDifference !== null &&
+        sessionRow.expectedBalance !== null
+      );
+    });
+  }, [salesSessionsHistory]);
 
   const filteredProductList = useMemo(() => {
     const normalizedSearch = productSearchQuery.trim().toLowerCase();
@@ -137,201 +144,54 @@ const AdminDashboardPage = (): ReactElement => {
     void loadProductListFromServer();
   }, [loadProductListFromServer]);
 
-  useEffect(() => {
-    const loadLoggedInUserProfile = async (): Promise<void> => {
+  const loadSalesSessionsHistoryFromServer =
+    useCallback(async (): Promise<void> => {
+      setIsLoadingSalesSessionsHistory(true);
+      setSalesSessionsHistoryErrorMessage("");
       try {
-        const response = await fetch("/api/auth/me", {
+        const response = await fetch("/api/sales-sessions/history?limit=100", {
           method: "GET",
           credentials: "include",
         });
-        const responseBody = (await response.json()) as MeApiResponse;
+        const responseBody =
+          (await response.json()) as SalesSessionsHistoryApiResponse;
         if (response.status === 401) {
           window.location.assign("/login");
           return;
         }
-        if (response.ok && responseBody.userProfile) {
-          setLoggedInUserFullName(responseBody.userProfile.fullName);
+        if (!response.ok) {
+          setSalesSessionsHistoryErrorMessage(
+            responseBody.message || "No se pudo cargar el historial de sesiones",
+          );
+          return;
         }
+        setSalesSessionsHistory(responseBody.salesSessionsHistory ?? []);
       } catch {
-        // Keep dashboard usable even if profile request fails.
+        setSalesSessionsHistoryErrorMessage(
+          "No se pudo cargar el historial de sesiones",
+        );
+      } finally {
+        setIsLoadingSalesSessionsHistory(false);
       }
-    };
-    void loadLoggedInUserProfile();
-  }, []);
+    }, []);
 
   useEffect(() => {
-    if (productFormModalMode !== "create") {
-      return;
-    }
-
-    const animationFrameId = requestAnimationFrame(() => {
-      barcodeInputReference.current?.focus();
-    });
-
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [productFormModalMode]);
+    void loadSalesSessionsHistoryFromServer();
+  }, [loadSalesSessionsHistoryFromServer]);
 
   function openCreateProductModal(): void {
-    setEditingProductIdentifier(null);
-    setProductNameInput("");
-    setProductSkuInput("");
-    setProductCategoryInput("SNACK");
-    setProductImageUrlInput("");
-    setProductPriceInput("");
-    setProductCurrentStockInput("");
-    setIsProductActive(true);
-    setFormErrorMessage("");
+    setEditingProduct(null);
     setProductFormModalMode("create");
   }
 
   function openEditProductModal(product: Product): void {
-    setEditingProductIdentifier(product.id);
-    setProductNameInput(product.name);
-    setProductSkuInput(product.sku);
-    setProductCategoryInput(product.category);
-    setProductImageUrlInput(product.imageUrl ?? "");
-    setProductPriceInput(String(product.price));
-    setProductCurrentStockInput(String(product.currentStock));
-    setIsProductActive(product.isActive);
-    setFormErrorMessage("");
+    setEditingProduct(product);
     setProductFormModalMode("edit");
   }
 
   function closeProductFormModal(): void {
     setProductFormModalMode("closed");
-    setEditingProductIdentifier(null);
-    setFormErrorMessage("");
-  }
-
-  async function handleLogout(): Promise<void> {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    window.location.assign("/login");
-  }
-
-  async function handleProductFormSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ): Promise<void> {
-    event.preventDefault();
-    setIsSavingProductForm(true);
-    setFormErrorMessage("");
-
-    const parsedPrice = Number.parseFloat(productPriceInput);
-    const parsedCurrentStock = Number.parseInt(productCurrentStockInput, 10);
-
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setFormErrorMessage("Invalid price");
-      setIsSavingProductForm(false);
-      return;
-    }
-
-    if (
-      !Number.isFinite(parsedCurrentStock) ||
-      !Number.isInteger(parsedCurrentStock) ||
-      parsedCurrentStock < 0
-    ) {
-      setFormErrorMessage("Invalid current stock");
-      setIsSavingProductForm(false);
-      return;
-    }
-
-    const trimmedProductName = productNameInput.trim();
-    if (trimmedProductName.length === 0) {
-      setFormErrorMessage("Product name is required");
-      setIsSavingProductForm(false);
-      return;
-    }
-
-    try {
-      if (productFormModalMode === "create") {
-        const response = await fetch("/api/products", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: trimmedProductName,
-            sku: productSkuInput,
-            category: productCategoryInput,
-            imageUrl:
-              productImageUrlInput.trim().length > 0
-                ? productImageUrlInput.trim()
-                : null,
-            price: parsedPrice,
-            currentStock: parsedCurrentStock,
-            isActive: isProductActive,
-          }),
-        });
-
-        const responseBody = (await response.json()) as SingleProductApiResponse;
-
-        if (response.status === 401) {
-          window.location.assign("/login");
-          return;
-        }
-
-        if (!response.ok) {
-          setFormErrorMessage(
-            responseBody.message || "Unable to create product",
-          );
-          return;
-        }
-
-        closeProductFormModal();
-        await loadProductListFromServer();
-        return;
-      }
-
-      if (
-        productFormModalMode === "edit" &&
-        typeof editingProductIdentifier === "string"
-      ) {
-        const response = await fetch(
-          `/api/products/${editingProductIdentifier}`,
-          {
-            method: "PATCH",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: trimmedProductName,
-              sku: productSkuInput,
-              category: productCategoryInput,
-              imageUrl:
-                productImageUrlInput.trim().length > 0
-                  ? productImageUrlInput.trim()
-                  : null,
-              price: parsedPrice,
-              currentStock: parsedCurrentStock,
-              isActive: isProductActive,
-            }),
-          },
-        );
-
-        const responseBody = (await response.json()) as SingleProductApiResponse;
-
-        if (response.status === 401) {
-          window.location.assign("/login");
-          return;
-        }
-
-        if (!response.ok) {
-          setFormErrorMessage(
-            responseBody.message || "Unable to update product",
-          );
-          return;
-        }
-
-        closeProductFormModal();
-        await loadProductListFromServer();
-      }
-    } catch {
-      setFormErrorMessage("Unexpected error while saving product");
-    } finally {
-      setIsSavingProductForm(false);
-    }
+    setEditingProduct(null);
   }
 
   async function handleSoftDeleteProduct(productIdentifier: string): Promise<void> {
@@ -372,12 +232,21 @@ const AdminDashboardPage = (): ReactElement => {
     }
   }
 
+  function formatSessionTypeLabel(sessionType: string): string {
+    if (sessionType === "RECREO") {
+      return "Recreo";
+    }
+    if (sessionType === "VENTA_LIBRE") {
+      return "Venta libre";
+    }
+    return sessionType;
+  }
+
   const isProductFormModalOpen = productFormModalMode !== "closed";
 
   return (
-    <main className="min-h-full bg-slate-50 px-4 py-8 dark:bg-zinc-950">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <main className="mx-auto min-h-0 w-full max-w-6xl space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-12 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <Package className="size-6 text-zinc-700 dark:text-zinc-200" />
@@ -389,22 +258,10 @@ const AdminDashboardPage = (): ReactElement => {
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Gestión de inventario y catálogo
               </p>
-              {loggedInUserFullName.length > 0 ? (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Usuario: {loggedInUserFullName}
-                </p>
-              ) : null}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              <LayoutDashboard className="size-4" aria-hidden />
-              Dashboard de Informes
-            </Link>
             <button
               type="button"
               onClick={openCreateProductModal}
@@ -413,16 +270,8 @@ const AdminDashboardPage = (): ReactElement => {
               <Plus className="size-4" />
               Nuevo producto
             </button>
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/40"
-            >
-              <LogOut className="size-4" aria-hidden />
-              Cerrar sesión
-            </button>
           </div>
-        </header>
+        </div>
 
         {pageErrorMessage.length > 0 ? (
           <p
@@ -433,280 +282,175 @@ const AdminDashboardPage = (): ReactElement => {
           </p>
         ) : null}
 
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
-              Productos
-            </h2>
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="search"
-                value={productSearchQuery}
-                onChange={(event) => setProductSearchQuery(event.target.value)}
-                placeholder="Buscar por nombre, categoría o código…"
-                className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-              />
+        <section className="grid h-[calc(100vh-260px)] grid-cols-1 gap-4 overflow-hidden lg:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => setIsProductsPanelOpen(true)}
+            className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-emerald-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <Package className="size-14 shrink-0 text-emerald-600" aria-hidden />
+            <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Productos</p>
+            <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
+              Gestión completa del catálogo.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCashClosuresPanelOpen(true)}
+            className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-amber-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <Banknote className="size-14 shrink-0 text-amber-600" aria-hidden />
+            <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Cierres de caja</p>
+            <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
+              Resumen de arqueos y diferencias.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSessionsHistoryPanelOpen(true)}
+            className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-sky-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <CalendarClock className="size-14 shrink-0 text-sky-600" aria-hidden />
+            <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Historial de sesiones</p>
+            <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
+              Recreos y ventas libres por sesión.
+            </p>
+          </button>
+        </section>
+
+        {isProductsPanelOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md dark:bg-zinc-950/55 md:p-6">
+            <div className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                <h2 className="text-lg font-semibold">Productos</h2>
+                <button type="button" onClick={() => setIsProductsPanelOpen(false)} className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="size-5" /></button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="relative w-full sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+                    <input type="search" value={productSearchQuery} onChange={(event) => setProductSearchQuery(event.target.value)} placeholder="Buscar por nombre, categoría o código…" className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800" />
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <table className="w-full min-w-[880px] text-left text-sm">
+                    <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-300">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Nombre</th>
+                        <th className="px-4 py-3 font-medium">Código de barras</th>
+                        <th className="px-4 py-3 font-medium">Categoría</th>
+                        <th className="px-4 py-3 font-medium">PVP (venta)</th>
+                        <th className="px-4 py-3 font-medium">Costo</th>
+                        <th className="px-4 py-3 font-medium">Stock</th>
+                        <th className="px-4 py-3 font-medium text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                      {filteredProductList.map((product) => (
+                        <tr key={product.id} className="bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50">
+                          <td className="px-4 py-3 font-medium">{product.name}</td>
+                          <td className="px-4 py-3">{product.sku.length > 0 ? product.sku : "—"}</td>
+                          <td className="px-4 py-3">{product.category}</td>
+                          <td className="px-4 py-3 tabular-nums">{formatArgentinaPesos(product.price)}</td>
+                          <td className="px-4 py-3 tabular-nums">{product.costPrice === null || product.costPrice === undefined ? "—" : formatArgentinaPesos(product.costPrice)}</td>
+                          <td className="px-4 py-3">{product.currentStock}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button type="button" onClick={() => openEditProductModal(product)} className="mr-2 rounded-lg border border-zinc-300 px-2 py-1 text-xs">Editar</button>
+                            <button type="button" onClick={() => void handleSoftDeleteProduct(product.id)} className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-red-600">Desactivar</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
+        ) : null}
 
-          <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-300">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Nombre</th>
-                  <th className="px-4 py-3 font-medium">Código de barras</th>
-                  <th className="px-4 py-3 font-medium">Categoría</th>
-                  <th className="px-4 py-3 font-medium">Precio</th>
-                  <th className="px-4 py-3 font-medium">Stock</th>
-                  <th className="px-4 py-3 font-medium">Creado</th>
-                  <th className="px-4 py-3 font-medium">Estado</th>
-                  <th className="px-4 py-3 font-medium text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                {isLoadingProductList ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-4 py-8 text-center text-zinc-500"
-                    >
-                      Cargando productos…
-                    </td>
-                  </tr>
-                ) : filteredProductList.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-4 py-8 text-center text-zinc-500"
-                    >
-                      No hay productos que coincidan con la búsqueda.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProductList.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
-                    >
-                      <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                        {product.name}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {product.sku.length > 0 ? product.sku : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                        {product.category}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
-                        {product.price.toFixed(2)}
-                      </td>
-                      <td
-                        className={
-                          product.currentStock < 5
-                            ? "px-4 py-3 font-semibold text-red-600 dark:text-red-400"
-                            : "px-4 py-3 text-zinc-700 dark:text-zinc-300"
-                        }
-                      >
-                        {product.currentStock}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                        {formatArgentinaDateTime(product.createdAt)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={
-                            product.isActive
-                              ? "inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
-                              : "inline-flex rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
-                          }
-                        >
-                          {product.isActive ? "Activo" : "Inactivo"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEditProductModal(product)}
-                            className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                            aria-label="Editar producto"
-                          >
-                            <Edit className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void handleSoftDeleteProduct(product.id)
-                            }
-                            disabled={!product.isActive}
-                            className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-200 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                            aria-label="Desactivar producto"
-                          >
-                            <Trash className="size-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
-      {isProductFormModalOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="product-form-title"
-        >
-          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2
-              id="product-form-title"
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
-            >
-              {productFormModalMode === "create"
-                ? "Nuevo producto"
-                : "Editar producto"}
-            </h2>
-
-            <form
-              onSubmit={(event) => void handleProductFormSubmit(event)}
-              className="mt-4 space-y-4"
-            >
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Código de barras
-                </span>
-                <input
-                  ref={barcodeInputReference}
-                  type="text"
-                  value={productSkuInput}
-                  onChange={(event) => setProductSkuInput(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                  placeholder="Opcional — escanear aquí"
-                  autoComplete="off"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Nombre <span className="text-red-500">*</span>
-                </span>
-                <input
-                  type="text"
-                  value={productNameInput}
-                  onChange={(event) => setProductNameInput(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Categoría <span className="text-red-500">*</span>
-                </span>
-                <select
-                  value={productCategoryInput}
-                  onChange={(event) =>
-                    setProductCategoryInput(event.target.value as Product["category"])
-                  }
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                >
-                  {PRODUCT_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  URL de imagen
-                </span>
-                <input
-                  type="url"
-                  value={productImageUrlInput}
-                  onChange={(event) => setProductImageUrlInput(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                  placeholder="https://..."
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Precio <span className="text-red-500">*</span>
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.01"
-                  value={productPriceInput}
-                  onChange={(event) => setProductPriceInput(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                  required
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Stock actual <span className="text-red-500">*</span>
-                </span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  value={productCurrentStockInput}
-                  onChange={(event) =>
-                    setProductCurrentStockInput(event.target.value)
-                  }
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-800"
-                  required
-                />
-              </label>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={isProductActive}
-                  onChange={(event) => setIsProductActive(event.target.checked)}
-                  className="size-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
-                />
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  Producto activo
-                </span>
-              </label>
-
-              {formErrorMessage.length > 0 ? (
-                <p className="text-sm text-red-600" role="alert">
-                  {formErrorMessage}
-                </p>
-              ) : null}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={closeProductFormModal}
-                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingProductForm}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  {isSavingProductForm ? "Guardando…" : "Guardar"}
-                </button>
+        {isCashClosuresPanelOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md dark:bg-zinc-950/55 md:p-6">
+            <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                <h2 className="text-lg font-semibold">Cierres de caja</h2>
+                <button type="button" onClick={() => setIsCashClosuresPanelOpen(false)} className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="size-5" /></button>
               </div>
-            </form>
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-300">
+                      <tr>
+                        <th className="px-3 py-3 font-medium">Operador</th>
+                        <th className="px-3 py-3 font-medium">Cierre</th>
+                        <th className="px-3 py-3 font-medium text-right">Total sesión</th>
+                        <th className="px-3 py-3 font-medium text-right">Diferencia</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                      {cashClosureSessionsOnly.map((sessionRow) => (
+                        <tr key={sessionRow.sessionIdentifier}>
+                          <td className="px-3 py-3">{sessionRow.operatorFullName ?? sessionRow.userIdentifier}</td>
+                          <td className="px-3 py-3">{sessionRow.closedAtIso ? formatArgentinaDateTime(sessionRow.closedAtIso) : "—"}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.totalAmount)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.cashDifference ?? 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+
+        {isSessionsHistoryPanelOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md dark:bg-zinc-950/55 md:p-6">
+            <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                <h2 className="text-lg font-semibold">Historial de sesiones</h2>
+                <button type="button" onClick={() => setIsSessionsHistoryPanelOpen(false)} className="rounded-lg p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"><X className="size-5" /></button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-zinc-50 text-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-300">
+                      <tr>
+                        <th className="px-3 py-3 font-medium">Inicio</th>
+                        <th className="px-3 py-3 font-medium">Tipo</th>
+                        <th className="px-3 py-3 font-medium">Estado</th>
+                        <th className="px-3 py-3 font-medium">Operador</th>
+                        <th className="px-3 py-3 font-medium">Notas</th>
+                        <th className="px-3 py-3 font-medium text-right">Total sesión</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                      {salesSessionsHistory.map((sessionRow) => (
+                        <tr key={sessionRow.sessionIdentifier}>
+                          <td className="px-3 py-3">{sessionRow.startedAtIso ? formatArgentinaDateTime(sessionRow.startedAtIso) : "—"}</td>
+                          <td className="px-3 py-3">{formatSessionTypeLabel(sessionRow.sessionType)}</td>
+                          <td className="px-3 py-3">{sessionRow.status === "OPEN" ? "Abierta" : "Cerrada"}</td>
+                          <td className="px-3 py-3">{sessionRow.operatorFullName ?? sessionRow.userIdentifier}</td>
+                          <td className="px-3 py-3">{sessionRow.notes ?? "—"}</td>
+                          <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.totalAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+      <ProductFormModal
+        isOpen={isProductFormModalOpen}
+        onClose={closeProductFormModal}
+        mode={productFormModalMode === "edit" ? "edit" : "create"}
+        initialProduct={productFormModalMode === "edit" ? editingProduct : null}
+        editingProductId={editingProduct?.id ?? null}
+        productList={productList}
+        onSuccess={loadProductListFromServer}
+      />
     </main>
   );
 };

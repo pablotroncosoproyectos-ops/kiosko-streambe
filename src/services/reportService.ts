@@ -25,6 +25,8 @@ export interface TopSellingProductReportRow {
   totalRevenue: number;
 }
 
+export type ReportSessionTypeFilter = "TOTAL" | "RECREO" | "LIBRE";
+
 function parseNumericValue(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -168,6 +170,142 @@ export async function getTopSellingProducts(
   );
 }
 
+interface TopProductsSaleItemRow {
+  product_id: string;
+  quantity: number;
+  unit_price: number | null;
+  products: { name?: string; sku?: string } | { name?: string; sku?: string }[] | null;
+  sales:
+    | {
+        created_at?: string;
+        sales_sessions?:
+          | { session_type?: string }
+          | { session_type?: string }[]
+          | null;
+      }
+    | {
+        created_at?: string;
+        sales_sessions?:
+          | { session_type?: string }
+          | { session_type?: string }[]
+          | null;
+      }[]
+    | null;
+}
+
+function resolveSessionTypeFromSaleItemRow(
+  row: TopProductsSaleItemRow,
+): string | null {
+  const salesNested = row.sales;
+  const salesRecord = Array.isArray(salesNested)
+    ? (salesNested[0] ?? null)
+    : salesNested;
+  if (!salesRecord || typeof salesRecord !== "object") {
+    return null;
+  }
+  const sessionsNested = (salesRecord as { sales_sessions?: unknown }).sales_sessions;
+  const sessionRecord = Array.isArray(sessionsNested)
+    ? (sessionsNested[0] ?? null)
+    : sessionsNested;
+  if (!sessionRecord || typeof sessionRecord !== "object") {
+    return null;
+  }
+  const raw = (sessionRecord as { session_type?: unknown }).session_type;
+  return typeof raw === "string" ? raw : null;
+}
+
+function resolveProductInfoFromSaleItemRow(row: TopProductsSaleItemRow): {
+  name: string;
+  sku: string | null;
+} {
+  const nested = row.products;
+  const productRecord = Array.isArray(nested) ? (nested[0] ?? null) : nested;
+  const name =
+    productRecord && typeof productRecord === "object" && typeof productRecord.name === "string"
+      ? productRecord.name
+      : "Sin nombre";
+  const skuRaw =
+    productRecord && typeof productRecord === "object" && typeof productRecord.sku === "string"
+      ? productRecord.sku
+      : "";
+  return { name, sku: skuRaw.trim().length > 0 ? skuRaw : null };
+}
+
+export async function getTopSellingProductsForReportDate(
+  supabaseClient: SupabaseClient,
+  reportCalendarDateYyyyMmDd: string,
+  maximumProductCount: number,
+  sessionTypeFilter: ReportSessionTypeFilter = "TOTAL",
+): Promise<TopSellingProductReportRow[]> {
+  if (!isValidCalendarDateYyyyMmDd(reportCalendarDateYyyyMmDd)) {
+    throw new Error("Invalid report calendar date");
+  }
+
+  const { rangeStartInclusiveUtcIso, rangeEndExclusiveUtcIso } =
+    getBuenosAiresZonedDayBoundsUtcIsoStrings(reportCalendarDateYyyyMmDd);
+
+  const { data: saleItemRows, error } = await supabaseClient
+    .from("sale_items")
+    .select(
+      "product_id, quantity, unit_price, products(name, sku), sales!inner(created_at, sales_sessions!inner(session_type))",
+    )
+    .gte("sales.created_at", rangeStartInclusiveUtcIso)
+    .lt("sales.created_at", rangeEndExclusiveUtcIso);
+
+  if (error) {
+    throw new Error("Unable to load top selling products");
+  }
+
+  const aggregatesByProduct = new Map<
+    string,
+    { productName: string; sku: string | null; totalUnitsSold: number; totalRevenue: number }
+  >();
+
+  for (const rowUnknown of saleItemRows ?? []) {
+    const row = rowUnknown as unknown as TopProductsSaleItemRow;
+    const productIdentifier = typeof row.product_id === "string" ? row.product_id : "";
+    if (productIdentifier.trim().length === 0) continue;
+
+    const sessionType = resolveSessionTypeFromSaleItemRow(row);
+    if (sessionTypeFilter === "RECREO" && sessionType !== "RECREO") continue;
+    if (sessionTypeFilter === "LIBRE" && sessionType !== "VENTA_LIBRE") continue;
+
+    const { name: productName, sku } = resolveProductInfoFromSaleItemRow(row);
+    const quantity = Math.round(parseNumericValue(row.quantity));
+    const unitPrice = parseNumericValue(row.unit_price);
+    const revenue = quantity * unitPrice;
+
+    const existing = aggregatesByProduct.get(productIdentifier);
+    if (existing) {
+      existing.totalUnitsSold += quantity;
+      existing.totalRevenue += revenue;
+    } else {
+      aggregatesByProduct.set(productIdentifier, {
+        productName,
+        sku,
+        totalUnitsSold: quantity,
+        totalRevenue: revenue,
+      });
+    }
+  }
+
+  return [...aggregatesByProduct.entries()]
+    .map(([productIdentifier, aggregate]) => ({
+      productIdentifier,
+      productName: aggregate.productName,
+      stockKeepingUnit: aggregate.sku,
+      totalUnitsSold: aggregate.totalUnitsSold,
+      totalRevenue: aggregate.totalRevenue,
+    }))
+    .sort((a, b) => {
+      if (b.totalUnitsSold !== a.totalUnitsSold) {
+        return b.totalUnitsSold - a.totalUnitsSold;
+      }
+      return b.totalRevenue - a.totalRevenue;
+    })
+    .slice(0, maximumProductCount);
+}
+
 export interface DailyClosureReportMetrics {
   reportCalendarDateYyyyMmDd: string;
   totalRevenue: number;
@@ -183,6 +321,10 @@ export interface DailyClosureReportMetrics {
   transactionCountQr: number;
   transactionCountTransfer: number;
   transactionCountDebit: number;
+  /** SUM(quantity * (unit_price - coalesce(unit_cost, 0))) por ítem */
+  grossProfitTotal: number;
+  grossProfitRecreationBreakTotal: number;
+  grossProfitFreeSaleTotal: number;
 }
 
 export interface InventoryMovementReportRow {
@@ -193,6 +335,8 @@ export interface InventoryMovementReportRow {
   quantity: number;
   reason: string;
   createdAtIso: string;
+  operatorFullName: string | null;
+  operatorRole: "ADMIN" | "OPERATOR" | null;
 }
 
 /**
@@ -202,6 +346,7 @@ export interface InventoryMovementReportRow {
 export async function getDailyClosureReportMetrics(
   supabaseClient: SupabaseClient,
   reportCalendarDateYyyyMmDd: string,
+  sessionTypeFilter: ReportSessionTypeFilter = "TOTAL",
 ): Promise<DailyClosureReportMetrics> {
   if (!isValidCalendarDateYyyyMmDd(reportCalendarDateYyyyMmDd)) {
     throw new Error("Invalid report calendar date");
@@ -212,7 +357,9 @@ export async function getDailyClosureReportMetrics(
 
   const { data: saleRows, error: salesError } = await supabaseClient
     .from("sales")
-    .select("total_price, payment_method, sales_sessions!inner(session_type)")
+    .select(
+      "id, total_price, payment_method, sales_sessions!inner(session_type)",
+    )
     .gte("created_at", rangeStartInclusiveUtcIso)
     .lt("created_at", rangeEndExclusiveUtcIso);
 
@@ -233,8 +380,16 @@ export async function getDailyClosureReportMetrics(
   let transactionCountTransfer = 0;
   let transactionCountDebit = 0;
 
+  const sessionTypeBySaleIdentifier = new Map<string, string>();
+  const saleIdentifiersForItems: string[] = [];
+
   for (const rowUnknown of saleRows ?? []) {
     const row = rowUnknown as Record<string, unknown>;
+    const saleIdentifier = typeof row.id === "string" ? row.id : "";
+    if (saleIdentifier.length > 0) {
+      saleIdentifiersForItems.push(saleIdentifier);
+    }
+
     const saleTotalPrice = parseNumericValue(row.total_price);
     const paymentMethodRaw = row.payment_method;
     const paymentMethodString =
@@ -256,6 +411,21 @@ export async function getDailyClosureReportMetrics(
       const nestedRecord = sessionNestedUnknown as Record<string, unknown>;
       const rawType = nestedRecord.session_type;
       sessionTypeString = typeof rawType === "string" ? rawType : null;
+    }
+
+    if (saleIdentifier.length > 0 && sessionTypeString !== null) {
+      sessionTypeBySaleIdentifier.set(saleIdentifier, sessionTypeString);
+    }
+
+    const includeSaleForFilter =
+      sessionTypeFilter === "TOTAL" ||
+      (sessionTypeFilter === "RECREO" &&
+        sessionTypeString === AUTOMATIC_SALE_CATEGORY_RECREATION_BREAK) ||
+      (sessionTypeFilter === "LIBRE" &&
+        sessionTypeString === AUTOMATIC_SALE_CATEGORY_FREE_SALE);
+
+    if (!includeSaleForFilter) {
+      continue;
     }
 
     totalRevenue += saleTotalPrice;
@@ -285,6 +455,45 @@ export async function getDailyClosureReportMetrics(
   const grandTotalReconciliationAmount =
     recreationBreakSessionRevenueTotal + freeSaleSessionRevenueTotal;
 
+  let grossProfitTotal = 0;
+  let grossProfitRecreationBreakTotal = 0;
+  let grossProfitFreeSaleTotal = 0;
+
+  if (saleIdentifiersForItems.length > 0) {
+    const { data: saleItemRows, error: saleItemsError } = await supabaseClient
+      .from("sale_items")
+      .select("sale_id, quantity, unit_price, unit_cost")
+      .in("sale_id", saleIdentifiersForItems);
+
+    if (saleItemsError) {
+      throw new Error("Unable to load daily closure report metrics");
+    }
+
+    for (const saleItemRowUnknown of saleItemRows ?? []) {
+      const saleItemRow = saleItemRowUnknown as Record<string, unknown>;
+      const saleIdentifierForItem = String(saleItemRow.sale_id ?? "");
+      const quantity = parseNumericValue(saleItemRow.quantity);
+      const unitPrice = parseNumericValue(saleItemRow.unit_price);
+      const unitCostRaw = saleItemRow.unit_cost;
+      const unitCostEffective =
+        unitCostRaw === null || unitCostRaw === undefined
+          ? 0
+          : parseNumericValue(unitCostRaw);
+      const lineGrossProfit = quantity * (unitPrice - unitCostEffective);
+
+      grossProfitTotal += lineGrossProfit;
+
+      const sessionTypeForSale = sessionTypeBySaleIdentifier.get(
+        saleIdentifierForItem,
+      );
+      if (sessionTypeForSale === AUTOMATIC_SALE_CATEGORY_RECREATION_BREAK) {
+        grossProfitRecreationBreakTotal += lineGrossProfit;
+      } else if (sessionTypeForSale === AUTOMATIC_SALE_CATEGORY_FREE_SALE) {
+        grossProfitFreeSaleTotal += lineGrossProfit;
+      }
+    }
+  }
+
   return {
     reportCalendarDateYyyyMmDd,
     totalRevenue,
@@ -300,6 +509,9 @@ export async function getDailyClosureReportMetrics(
     transactionCountQr,
     transactionCountTransfer,
     transactionCountDebit,
+    grossProfitTotal,
+    grossProfitRecreationBreakTotal,
+    grossProfitFreeSaleTotal,
   };
 }
 
@@ -356,6 +568,126 @@ export async function getRecentInventoryMovementsWithProductName(
       quantity: Math.round(parseNumericValue(row.quantity)),
       reason: typeof row.reason === "string" ? row.reason : "",
       createdAtIso: String(row.created_at ?? ""),
+      operatorFullName: null,
+      operatorRole: null,
     };
+  });
+}
+
+export async function getRecentInventoryMovementsWithProductNameForReportDate(
+  supabaseClient: SupabaseClient,
+  reportCalendarDateYyyyMmDd: string,
+  maximumRowCount: number,
+  sessionTypeFilter: ReportSessionTypeFilter = "TOTAL",
+): Promise<InventoryMovementReportRow[]> {
+  if (!isValidCalendarDateYyyyMmDd(reportCalendarDateYyyyMmDd)) {
+    throw new Error("Invalid report calendar date");
+  }
+
+  const { rangeStartInclusiveUtcIso, rangeEndExclusiveUtcIso } =
+    getBuenosAiresZonedDayBoundsUtcIsoStrings(reportCalendarDateYyyyMmDd);
+
+  const { data: movementRows, error: movementsError } = await supabaseClient
+    .from("inventory_movements")
+    .select(
+      "id, product_id, quantity, movement_type, reason, created_at, products(name), users(full_name, role)",
+    )
+    .gte("created_at", rangeStartInclusiveUtcIso)
+    .lt("created_at", rangeEndExclusiveUtcIso)
+    .order("created_at", { ascending: false })
+    .limit(maximumRowCount);
+
+  if (movementsError) {
+    throw new Error("Unable to load inventory movements");
+  }
+
+  const rows = (movementRows ?? []).map((rowUnknown) => {
+    const row = rowUnknown as Record<string, unknown>;
+    const productsNestedUnknown = row.products;
+    const usersNestedUnknown = row.users;
+
+    let resolvedProductName = "Unknown product";
+    if (Array.isArray(productsNestedUnknown)) {
+      const firstProductRow = productsNestedUnknown[0] as
+        | { name?: string }
+        | undefined;
+      if (
+        typeof firstProductRow?.name === "string" &&
+        firstProductRow.name.trim().length > 0
+      ) {
+        resolvedProductName = firstProductRow.name;
+      }
+    } else if (
+      productsNestedUnknown &&
+      typeof productsNestedUnknown === "object" &&
+      !Array.isArray(productsNestedUnknown)
+    ) {
+      const productRecord = productsNestedUnknown as { name?: string };
+      if (
+        typeof productRecord.name === "string" &&
+        productRecord.name.trim().length > 0
+      ) {
+        resolvedProductName = productRecord.name;
+      }
+    }
+
+    let operatorFullName: string | null = null;
+    let operatorRole: "ADMIN" | "OPERATOR" | null = null;
+    if (Array.isArray(usersNestedUnknown)) {
+      const firstUserRow = usersNestedUnknown[0] as
+        | { full_name?: string; role?: string }
+        | undefined;
+      if (
+        typeof firstUserRow?.full_name === "string" &&
+        firstUserRow.full_name.trim().length > 0
+      ) {
+        operatorFullName = firstUserRow.full_name;
+      }
+      if (firstUserRow?.role === "ADMIN" || firstUserRow?.role === "OPERATOR") {
+        operatorRole = firstUserRow.role;
+      }
+    } else if (
+      usersNestedUnknown &&
+      typeof usersNestedUnknown === "object" &&
+      !Array.isArray(usersNestedUnknown)
+    ) {
+      const userRecord = usersNestedUnknown as { full_name?: string; role?: string };
+      if (
+        typeof userRecord.full_name === "string" &&
+        userRecord.full_name.trim().length > 0
+      ) {
+        operatorFullName = userRecord.full_name;
+      }
+      if (userRecord.role === "ADMIN" || userRecord.role === "OPERATOR") {
+        operatorRole = userRecord.role;
+      }
+    }
+
+    return {
+      movementIdentifier: String(row.id ?? ""),
+      productIdentifier: String(row.product_id ?? ""),
+      productName: resolvedProductName,
+      movementType: String(row.movement_type ?? ""),
+      quantity: Math.round(parseNumericValue(row.quantity)),
+      reason: typeof row.reason === "string" ? row.reason : "",
+      createdAtIso: String(row.created_at ?? ""),
+      operatorFullName,
+      operatorRole,
+    };
+  });
+
+  return rows.filter((row) => {
+    if (sessionTypeFilter === "TOTAL") {
+      return true;
+    }
+    const normalizedReason = row.reason.trim().toUpperCase();
+    if (sessionTypeFilter === "RECREO") {
+      return normalizedReason.includes("RECREO");
+    }
+    return (
+      normalizedReason.includes("VENTA_LIBRE") ||
+      normalizedReason.includes("VENTA LIBRE") ||
+      normalizedReason.includes("LIBRE")
+    );
   });
 }

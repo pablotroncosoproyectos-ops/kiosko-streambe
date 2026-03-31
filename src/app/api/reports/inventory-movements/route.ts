@@ -1,17 +1,38 @@
 import { NextResponse } from "next/server";
 import { buildSanitizedAuthenticatedRouteHandlerResponse } from "@/lib/authenticatedRouteHandlerErrorResponse";
 import { requireAuthenticatedAuthorizedSupabaseClient } from "@/lib/supabase-server-route";
-import { getRecentInventoryMovementsWithProductName } from "@/services/reportService";
+import {
+  getRecentInventoryMovementsWithProductNameForReportDate,
+  type ReportSessionTypeFilter,
+} from "@/services/reportService";
 
 const RECENT_INVENTORY_MOVEMENTS_LIMIT = 10;
 
-export async function GET(): Promise<NextResponse> {
+function resolveSessionTypeFilterFromSearchParam(
+  raw: string | null,
+): ReportSessionTypeFilter {
+  if (raw === "RECREO" || raw === "LIBRE" || raw === "TOTAL") {
+    return raw;
+  }
+  return "TOTAL";
+}
+
+export async function GET(request: Request): Promise<NextResponse> {
   try {
     const supabaseServerClient =
       await requireAuthenticatedAuthorizedSupabaseClient(["ADMIN", "OPERATOR"]);
-    const recentInventoryMovements = await getRecentInventoryMovementsWithProductName(
+
+    const url = new URL(request.url);
+    const reportDate = url.searchParams.get("reportDate") ?? "";
+    const sessionTypeFilter = resolveSessionTypeFilterFromSearchParam(
+      url.searchParams.get("sessionType"),
+    );
+
+    const recentInventoryMovements = await getRecentInventoryMovementsWithProductNameForReportDate(
       supabaseServerClient,
+      reportDate,
       RECENT_INVENTORY_MOVEMENTS_LIMIT,
+      sessionTypeFilter,
     );
 
     return NextResponse.json({ recentInventoryMovements }, { status: 200 });

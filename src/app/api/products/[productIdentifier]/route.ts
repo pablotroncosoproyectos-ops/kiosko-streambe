@@ -62,10 +62,14 @@ function buildSanitizedErrorResponse(error: unknown): NextResponse {
     );
   }
 
-  return NextResponse.json(
-    { message: "Unable to process request" },
-    { status: 500 },
-  );
+  if (errorMessage === "Invalid product category") {
+    return NextResponse.json(
+      { message: "Invalid product category" },
+      { status: 400 },
+    );
+  }
+
+  return NextResponse.json({ message: errorMessage }, { status: 500 });
 }
 
 function parseProductUpdatePayload(
@@ -101,14 +105,25 @@ function parseProductUpdatePayload(
     }
     productUpdatePayload.price = parsedBody.price;
   }
+
+  if ("costPrice" in parsedBody) {
+    if (parsedBody.costPrice === null) {
+      productUpdatePayload.costPrice = null;
+    } else if (
+      typeof parsedBody.costPrice === "number" &&
+      Number.isFinite(parsedBody.costPrice) &&
+      parsedBody.costPrice >= 0
+    ) {
+      productUpdatePayload.costPrice = parsedBody.costPrice;
+    } else {
+      return null;
+    }
+  }
   if ("category" in parsedBody) {
     if (
-      parsedBody.category !== "DULCE" &&
-      parsedBody.category !== "SALADO" &&
-      parsedBody.category !== "SNACK" &&
-      parsedBody.category !== "BEBIDA" &&
-      parsedBody.category !== "FRUTA" &&
-      parsedBody.category !== "LIBRERIA"
+      typeof parsedBody.category !== "string" ||
+      parsedBody.category.trim().length === 0 ||
+      parsedBody.category.trim().length > 80
     ) {
       return null;
     }
@@ -137,6 +152,63 @@ function parseProductUpdatePayload(
       return null;
     }
     productUpdatePayload.isActive = parsedBody.isActive;
+  }
+
+  if ("isBulk" in parsedBody) {
+    if (typeof parsedBody.isBulk !== "boolean") {
+      return null;
+    }
+    productUpdatePayload.isBulk = parsedBody.isBulk;
+  }
+
+  if ("quantityPerUnit" in parsedBody) {
+    if (parsedBody.quantityPerUnit === null) {
+      productUpdatePayload.quantityPerUnit = null;
+    } else if (
+      typeof parsedBody.quantityPerUnit === "number" &&
+      Number.isFinite(parsedBody.quantityPerUnit) &&
+      parsedBody.quantityPerUnit > 0
+    ) {
+      productUpdatePayload.quantityPerUnit = parsedBody.quantityPerUnit;
+    } else {
+      return null;
+    }
+  }
+
+  if ("isCombo" in parsedBody) {
+    if (typeof parsedBody.isCombo !== "boolean") {
+      return null;
+    }
+    productUpdatePayload.isCombo = parsedBody.isCombo;
+  }
+
+  if ("comboItems" in parsedBody) {
+    if (!Array.isArray(parsedBody.comboItems)) {
+      return null;
+    }
+    productUpdatePayload.comboItems = parsedBody.comboItems
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+        const row = item as {
+          componentProductId?: unknown;
+          quantityPerCombo?: unknown;
+        };
+        if (
+          typeof row.componentProductId !== "string" ||
+          typeof row.quantityPerCombo !== "number" ||
+          !Number.isFinite(row.quantityPerCombo) ||
+          row.quantityPerCombo <= 0
+        ) {
+          return null;
+        }
+        return {
+          componentProductId: row.componentProductId,
+          quantityPerCombo: row.quantityPerCombo,
+        };
+      })
+      .filter((item): item is { componentProductId: string; quantityPerCombo: number } => item !== null);
   }
 
   return productUpdatePayload;

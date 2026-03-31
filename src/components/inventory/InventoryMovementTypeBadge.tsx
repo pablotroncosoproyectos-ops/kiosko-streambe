@@ -28,6 +28,14 @@ export function InventoryMovementTypeBadge({
     );
   }
 
+  if (normalizedMovementType === "OUT") {
+    return (
+      <span className="inline-flex rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-900 ring-1 ring-orange-200 dark:bg-orange-950/50 dark:text-orange-200 dark:ring-orange-800">
+        SALIDA
+      </span>
+    );
+  }
+
   if (normalizedMovementType === "ADJUSTMENT") {
     return (
       <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-200">

@@ -2,11 +2,11 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 /**
- * Middleware de Control de Acceso y Sesión (RBAC)
+ * Proxy de Control de Acceso y Sesión (RBAC) - Actualizado para Next.js 16
  * Proyecto: KIOSKO-STREAMBE
  * Valida sesión contra Auth y Rol contra tabla pública 'users'
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: { headers: request.headers },
   })
@@ -76,6 +76,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Aplicar el middleware a todas las rutas excepto archivos estáticos y APIs
+  // Aplicar el proxy a todas las rutas excepto archivos estáticos y APIs
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }

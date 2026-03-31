@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { requireAuthenticatedAuthorizedSupabaseClient } from "@/lib/supabase-server-route";
-import { processSale, type ProcessSalePayload } from "@/services/saleService";
+import {
+  INVENTORY_MOVEMENT_PRODUCT_ID_NULL_ERROR_MESSAGE,
+  MISSING_OPEN_SESSION_ERROR_MESSAGE,
+  processSale,
+  type ProcessSalePayload,
+} from "@/services/saleService";
 
 interface ProcessSaleRequestBody {
   paymentMethod: "CASH" | "DEBIT" | "TRANSFER" | "QR";
   automaticSaleCategory: "RECREO" | "VENTA_LIBRE";
+  notes?: string | null;
   saleItemsList: Array<{
+    productId?: string;
     productIdentifier?: string;
     product_id?: string;
     quantity: number;
@@ -41,7 +48,21 @@ function buildSanitizedErrorResponse(error: unknown): NextResponse {
     return NextResponse.json({ message: "Stock insuficiente" }, { status: 409 });
   }
 
-  return NextResponse.json({ message: "No se pudo procesar la venta" }, { status: 500 });
+  if (error.message === MISSING_OPEN_SESSION_ERROR_MESSAGE) {
+    return NextResponse.json(
+      { message: MISSING_OPEN_SESSION_ERROR_MESSAGE },
+      { status: 409 },
+    );
+  }
+
+  if (error.message === INVENTORY_MOVEMENT_PRODUCT_ID_NULL_ERROR_MESSAGE) {
+    return NextResponse.json(
+      { message: INVENTORY_MOVEMENT_PRODUCT_ID_NULL_ERROR_MESSAGE },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ message: error.message }, { status: 500 });
 }
 
 function isValidProcessSaleRequestBody(
@@ -69,6 +90,14 @@ function isValidProcessSaleRequestBody(
     return false;
   }
 
+  const hasValidNotes =
+    parsedBody.notes === undefined ||
+    parsedBody.notes === null ||
+    typeof parsedBody.notes === "string";
+  if (!hasValidNotes) {
+    return false;
+  }
+
   return parsedBody.saleItemsList.every((saleItem) => {
     if (!saleItem || typeof saleItem !== "object") {
       return false;
@@ -76,6 +105,8 @@ function isValidProcessSaleRequestBody(
 
     const parsedSaleItem = saleItem as Record<string, unknown>;
     const hasValidProductIdentifier =
+      (typeof parsedSaleItem.productId === "string" &&
+        parsedSaleItem.productId.trim().length > 0) ||
       (typeof parsedSaleItem.productIdentifier === "string" &&
         parsedSaleItem.productIdentifier.trim().length > 0) ||
       (typeof parsedSaleItem.product_id === "string" &&
@@ -101,13 +132,22 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const normalizedProcessSalePayload: ProcessSalePayload = {
       paymentMethod: requestBody.paymentMethod,
-      automaticSaleCategory: requestBody.automaticSaleCategory,
+      automaticSaleCategory: requestBody.automaticSaleCategory
+        .trim()
+        .toUpperCase() as ProcessSalePayload["automaticSaleCategory"],
+      notes:
+        typeof requestBody.notes === "string" || requestBody.notes === null
+          ? requestBody.notes
+          : null,
       saleItemsList: requestBody.saleItemsList.map((saleItem) => ({
-        productIdentifier:
-          typeof saleItem.productIdentifier === "string" &&
-          saleItem.productIdentifier.trim().length > 0
-            ? saleItem.productIdentifier
-            : (saleItem.product_id as string),
+        productId:
+          typeof saleItem.productId === "string" &&
+          saleItem.productId.trim().length > 0
+            ? saleItem.productId
+            : typeof saleItem.productIdentifier === "string" &&
+                saleItem.productIdentifier.trim().length > 0
+              ? saleItem.productIdentifier
+              : (saleItem.product_id as string),
         quantity: saleItem.quantity,
       })),
     };
@@ -121,6 +161,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       {
         message: "Venta procesada con éxito",
         saleIdentifier: processSaleResult.saleIdentifier,
+        saleId: processSaleResult.saleIdentifier,
         totalSaleAmount: processSaleResult.totalSaleAmount,
       },
       { status: 201 },
