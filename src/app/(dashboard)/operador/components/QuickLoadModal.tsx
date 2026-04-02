@@ -1,6 +1,7 @@
 "use client";
 
-import { Package, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Package, X, Search, LayoutGrid, ChevronDown, Check, ShoppingCart, ScanLine } from "lucide-react";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
 import type { Product } from "@/types/database";
 import type { CatalogBrowseMode, CartItem, SelectedPaymentMethod } from "../types";
@@ -20,21 +21,14 @@ export interface QuickLoadModalProps {
   setQuickLoadSearchQuery: Dispatch<SetStateAction<string>>;
   quickLoadDisplayedProducts: Product[];
   isLoadingProductsCatalog: boolean;
-  onAddProductFromQuickLoad: (
-    product: Product,
-    quantity: number,
-    lineSubtotal: number,
-  ) => void;
+  onAddProductFromQuickLoad: (product: Product, quantity: number, lineSubtotal: number) => void;
   totalSaleAmount: number;
   saleItemsList: CartItem[];
   pagedCartItems: CartItem[];
   cartPageIndex: number;
   cartTotalPages: number;
   setCartPageIndex: Dispatch<SetStateAction<number>>;
-  onUpdateSaleItemQuantity: (
-    productIdentifier: string,
-    quantity: number,
-  ) => void;
+  onUpdateSaleItemQuantity: (productIdentifier: string, quantity: number) => void;
   onToggleSaleItemUseCostPrice: (productIdentifier: string) => void;
   onRemoveSaleItem: (productIdentifier: string) => void;
   selectedPaymentMethod: SelectedPaymentMethod;
@@ -45,120 +39,276 @@ export interface QuickLoadModalProps {
   isSubmittingSale: boolean;
 }
 
-export function QuickLoadModal({
-  quickLoadModalBackdropVisible,
-  onClose,
-  catalogBrowseMode,
-  setCatalogBrowseMode,
-  quickLoadSelectedCategory,
-  setQuickLoadSelectedCategory,
-  catalogUniqueCategoryList,
-  quickLoadSearchQuery,
-  setQuickLoadSearchQuery,
-  quickLoadDisplayedProducts,
-  isLoadingProductsCatalog,
-  onAddProductFromQuickLoad,
-  totalSaleAmount,
-  saleItemsList,
-  pagedCartItems,
-  cartPageIndex,
-  cartTotalPages,
-  setCartPageIndex,
-  onUpdateSaleItemQuantity,
-  onToggleSaleItemUseCostPrice,
-  onRemoveSaleItem,
-  selectedPaymentMethod,
-  setSelectedPaymentMethod,
-  saleNotesInput,
-  setSaleNotesInput,
-  onFinalizeSale,
-  isSubmittingSale,
-}: QuickLoadModalProps): ReactElement {
+export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
+  const [activeTab, setActiveTab] = useState<"catalog" | "checkout">("catalog");
+  const [activeView, setActiveView] = useState<"manual" | "scanner">("manual");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdown de categorías al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md transition-opacity duration-300 ease-out dark:bg-zinc-950/55 md:p-6 ${quickLoadModalBackdropVisible ? "opacity-100" : "opacity-0"}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-0 backdrop-blur-md transition-opacity duration-300 ease-out md:p-6 ${
+        props.quickLoadModalBackdropVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="quick-load-title"
     >
       <div
-        className={`flex max-h-[min(100dvh,100vh)] w-full max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-white/30 bg-white/90 shadow-2xl ring-1 ring-black/5 transition-all duration-300 ease-out dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10 md:max-h-[min(92vh,920px)] md:max-w-7xl ${quickLoadModalBackdropVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-[0.98] opacity-0"}`}
+        className={`flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-zinc-900 md:h-[95vh] md:max-w-7xl md:rounded-3xl md:border md:border-white/20 ${
+          props.quickLoadModalBackdropVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-[0.95] opacity-0"
+        }`}
       >
-        {/* HEADER - Se mantiene fijo arriba */}
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 px-6 py-5 dark:border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-              <Package className="size-6" aria-hidden />
-            </div>
-            <div>
-              <h2
-                id="quick-load-title"
-                className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100"
+        {/* --- HEADER RESPONSIVO --- */}
+        <header className="flex shrink-0 flex-col gap-3 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800 md:flex-row md:items-center md:px-6 md:py-4">
+          
+          {/* Bloque Izquierdo: Selectores de Modo (Manual vs Scanner) */}
+          <div className="flex items-center justify-between gap-3 md:justify-start">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setActiveView("manual")}
+                className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all ${
+                  activeView === "manual" 
+                  ? "bg-emerald-50 dark:bg-emerald-500/10" 
+                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
               >
-                Carga rápida
-              </h2>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Catálogo y cobro en un solo lugar
-              </p>
+                <div className={`flex size-9 items-center justify-center rounded-lg transition-colors ${
+                  activeView === "manual" 
+                  ? "bg-emerald-500 text-white" 
+                  : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                }`}>
+                  <Package className="size-5" />
+                </div>
+                <div className="text-left leading-tight">
+                  <h2 className={`text-[13px] font-bold md:text-sm ${
+                    activeView === "manual" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100"
+                  }`}>Carga rápida</h2>
+                  <p className="text-[10px] text-zinc-500">Manual</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setActiveView("scanner")}
+                className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all ${
+                  activeView === "scanner" 
+                  ? "bg-blue-50 dark:bg-blue-500/10" 
+                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                <div className={`flex size-9 items-center justify-center rounded-lg transition-colors ${
+                  activeView === "scanner" 
+                  ? "bg-blue-500 text-white" 
+                  : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+                }`}>
+                  <ScanLine className="size-5" />
+                </div>
+                <div className="text-left leading-tight">
+                  <h2 className={`text-[13px] font-bold md:text-sm ${
+                    activeView === "scanner" ? "text-blue-600 dark:text-blue-400" : "text-zinc-900 dark:text-zinc-100"
+                  }`}>Scanner QR</h2>
+                  <p className="text-[10px] text-zinc-500">Automático</p>
+                </div>
+              </button>
             </div>
+
+            <button onClick={props.onClose} className="shrink-0 rounded-lg p-1.5 text-zinc-400 md:hidden">
+              <X className="size-5" />
+            </button>
           </div>
+
+          {/* Bloque Derecho: Controles de búsqueda (Solo en Manual) */}
+          {activeView === "manual" && (
+            <div className="flex w-full items-center gap-3 md:ml-auto md:w-auto md:flex-1 md:justify-end">
+              {/* Toggle Categorías/Buscador (Escritorio) */}
+              <div className="hidden items-center rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800/50 md:flex">
+                <button
+                  onClick={() => { props.setCatalogBrowseMode("categories"); setIsDropdownOpen(false); }}
+                  className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                    props.catalogBrowseMode === "categories" ? "bg-white text-emerald-600 shadow-sm dark:bg-zinc-700" : "text-zinc-500"
+                  }`}
+                >
+                  <LayoutGrid className="size-3.5" /> Categorías
+                </button>
+                <button
+                  onClick={() => { props.setCatalogBrowseMode("search"); setIsDropdownOpen(false); }}
+                  className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                    props.catalogBrowseMode === "search" ? "bg-white text-emerald-600 shadow-sm dark:bg-zinc-700" : "text-zinc-500"
+                  }`}
+                >
+                  <Search className="size-3.5" /> Buscador
+                </button>
+              </div>
+
+              {/* Input Dinámico: Select de Categoría o Input de Texto */}
+              <div className="flex-1 md:max-w-[320px] lg:max-w-[400px]">
+                {props.catalogBrowseMode === "categories" ? (
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="flex w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-xs font-bold outline-none dark:border-zinc-700 dark:bg-zinc-800 md:py-2"
+                    >
+                      <span className="truncate uppercase">
+                        {props.quickLoadSelectedCategory === "ALL" ? "TODAS LAS CATEGORÍAS" : props.quickLoadSelectedCategory}
+                      </span>
+                      <ChevronDown className={`size-4 ml-2 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    
+                    <div className={`absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl transition-all dark:bg-zinc-800 ${
+                      isDropdownOpen ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
+                    }`}>
+                      <div className="max-h-60 overflow-y-auto p-1.5 custom-scrollbar">
+                        <button
+                          onClick={() => { props.setQuickLoadSelectedCategory("ALL"); setIsDropdownOpen(false); }}
+                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs font-bold ${
+                            props.quickLoadSelectedCategory === "ALL" ? "bg-emerald-500 text-white" : "hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                          }`}
+                        >
+                          TODAS LAS CATEGORÍAS {props.quickLoadSelectedCategory === "ALL" && <Check className="size-3.5" />}
+                        </button>
+                        {props.catalogUniqueCategoryList.map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => { props.setQuickLoadSelectedCategory(cat); setIsDropdownOpen(false); }}
+                            className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 mt-1 text-left text-xs font-bold ${
+                              props.quickLoadSelectedCategory === cat ? "bg-emerald-500 text-white" : "hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {cat.toUpperCase()} {props.quickLoadSelectedCategory === cat && <Check className="size-3.5" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      type="text"
+                      value={props.quickLoadSearchQuery}
+                      onChange={(e) => props.setQuickLoadSearchQuery(e.target.value)}
+                      placeholder="Buscar producto..."
+                      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-800 outline-none focus:border-emerald-500 md:py-2"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <button onClick={props.onClose} className="hidden shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 md:flex">
+                <X className="size-5" />
+              </button>
+            </div>
+          )}
+        </header>
+
+        {/* --- TABS PARA MÓVIL --- */}
+        <div className="flex shrink-0 border-b border-zinc-100 dark:border-zinc-800 lg:hidden">
           <button
-            type="button"
-            onClick={onClose}
-            className="rounded-2xl p-2.5 text-zinc-500 transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            aria-label="Cerrar"
+            onClick={() => setActiveTab("catalog")}
+            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-bold transition ${
+              activeTab === "catalog" ? "border-b-2 border-emerald-500 text-emerald-600" : "text-zinc-500"
+            }`}
           >
-            <X className="size-5" />
+            <LayoutGrid className="size-4" /> Productos
+          </button>
+          <button
+            onClick={() => setActiveTab("checkout")}
+            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-bold transition ${
+              activeTab === "checkout" ? "border-b-2 border-emerald-500 text-emerald-600" : "text-zinc-500"
+            }`}
+          >
+            <ShoppingCart className="size-4" /> Carrito
+            {props.saleItemsList.length > 0 && (
+              <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">
+                {props.saleItemsList.length}
+              </span>
+            )}
           </button>
         </div>
 
-        {/* CONTENIDO PRINCIPAL - Con Grid responsivo */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden p-4 md:p-8 lg:grid-cols-12">
-          
-          {/* COLUMNA IZQUIERDA: Catálogo */}
-          <div className="lg:col-span-4 overflow-hidden flex flex-col">
-            <CatalogSection
-              catalogBrowseMode={catalogBrowseMode}
-              onCatalogBrowseModeChange={setCatalogBrowseMode}
-              quickLoadSelectedCategory={quickLoadSelectedCategory}
-              onQuickLoadSelectedCategoryChange={setQuickLoadSelectedCategory}
-              catalogUniqueCategoryList={catalogUniqueCategoryList}
-              quickLoadSearchQuery={quickLoadSearchQuery}
-              onQuickLoadSearchQueryChange={setQuickLoadSearchQuery}
-              quickLoadDisplayedProducts={quickLoadDisplayedProducts}
-              isLoadingProductsCatalog={isLoadingProductsCatalog}
-              onAddProductFromQuickLoad={onAddProductFromQuickLoad}
-            />
-          </div>
+        {/* --- CONTENIDO PRINCIPAL --- */}
+        <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-12">
+          {activeView === "manual" ? (
+            <>
+              {/* Sección de Catálogo */}
+              <section className={`flex flex-col h-full min-h-0 border-r border-zinc-100 dark:border-zinc-800 lg:col-span-5 xl:col-span-4 overflow-hidden ${
+                activeTab === "catalog" ? "flex" : "hidden lg:flex"
+              }`}>
+                <CatalogSection
+                  quickLoadDisplayedProducts={props.quickLoadDisplayedProducts}
+                  isLoadingProductsCatalog={props.isLoadingProductsCatalog}
+                  onAddProductFromQuickLoad={props.onAddProductFromQuickLoad}
+                />
+              </section>
 
-          {/* COLUMNA DERECHA: Carrito y Pago */}
-          <div className="flex flex-col rounded-2xl border border-zinc-200/80 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-950/40 lg:col-span-8 overflow-y-auto custom-scrollbar">
-            <div className="p-6 space-y-8">
-              <CartSection
-                totalSaleAmount={totalSaleAmount}
-                saleItemsList={saleItemsList}
-                pagedCartItems={pagedCartItems}
-                cartPageIndex={cartPageIndex}
-                cartTotalPages={cartTotalPages}
-                setCartPageIndex={setCartPageIndex}
-                onUpdateSaleItemQuantity={onUpdateSaleItemQuantity}
-                onToggleSaleItemUseCostPrice={onToggleSaleItemUseCostPrice}
-                onRemoveSaleItem={onRemoveSaleItem}
-              />
-              
-              <PaymentPanel
-                selectedPaymentMethod={selectedPaymentMethod}
-                setSelectedPaymentMethod={setSelectedPaymentMethod}
-                saleNotesInput={saleNotesInput}
-                setSaleNotesInput={setSaleNotesInput}
-                onClose={onClose}
-                onFinalizeSale={onFinalizeSale}
-                isSubmittingSale={isSubmittingSale}
-                saleItemsCount={saleItemsList.length}
-              />
-            </div>
-          </div>
-        </div>
+              {/* Sección de Carrito y Pago */}
+              <section className={`flex flex-col h-full min-h-0 bg-zinc-50/50 dark:bg-zinc-950/20 lg:col-span-7 xl:col-span-8 overflow-hidden ${
+                activeTab === "checkout" ? "flex" : "hidden lg:flex"
+              }`}>
+                <div className="flex flex-1 flex-col overflow-y-auto p-3 custom-scrollbar md:p-6 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                  <div className="mx-auto w-full max-w-4xl space-y-6">
+                    <CartSection
+                      totalSaleAmount={props.totalSaleAmount}
+                      saleItemsList={props.saleItemsList}
+                      pagedCartItems={props.pagedCartItems}
+                      cartPageIndex={props.cartPageIndex}
+                      cartTotalPages={props.cartTotalPages}
+                      setCartPageIndex={props.setCartPageIndex}
+                      onUpdateSaleItemQuantity={props.onUpdateSaleItemQuantity}
+                      onToggleSaleItemUseCostPrice={props.onToggleSaleItemUseCostPrice}
+                      onRemoveSaleItem={props.onRemoveSaleItem}
+                    />
+                    
+                    <PaymentPanel
+                      selectedPaymentMethod={props.selectedPaymentMethod}
+                      setSelectedPaymentMethod={props.setSelectedPaymentMethod}
+                      saleNotesInput={props.saleNotesInput}
+                      setSaleNotesInput={props.setSaleNotesInput}
+                      onClose={props.onClose}
+                      onFinalizeSale={props.onFinalizeSale}
+                      isSubmittingSale={props.isSubmittingSale}
+                      saleItemsCount={props.saleItemsList.length}
+                    />
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            /* CONTENIDO DEL SCANNER (Placeholder) */
+            <section className="col-span-12 flex items-center justify-center bg-zinc-50/30 dark:bg-zinc-900">
+              <div className="max-w-md px-6 text-center">
+                <div className="relative mx-auto mb-6 flex size-24 items-center justify-center">
+                  <div className="absolute inset-0 animate-ping rounded-full bg-blue-500/20"></div>
+                  <div className="relative flex size-16 items-center justify-center rounded-2xl bg-blue-500 text-white shadow-xl">
+                    <ScanLine className="size-10" />
+                  </div>
+                </div>
+                <h3 className="mb-2 text-xl font-bold text-zinc-900 dark:text-zinc-100">Modo Scanner Activo</h3>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Escanea el código del ticket o del producto para procesar la carga automáticamente.
+                </p>
+                <div className="mt-8 flex justify-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:bg-blue-500/10">
+                    Acepta QR
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:bg-blue-500/10">
+                    Acepta Barcode
+                  </span>
+                </div>
+              </div>
+            </section>
+          )}
+        </main>
       </div>
     </div>
   );

@@ -13,7 +13,6 @@ import {
   Package,
   Plus,
   Search,
-  Trash,
   X,
 } from "lucide-react";
 import type { Product } from "@/types/database";
@@ -73,10 +72,7 @@ const AdminDashboardPage = (): ReactElement => {
   const [salesSessionsHistory, setSalesSessionsHistory] = useState<
     SalesSessionHistoryRow[]
   >([]);
-  const [isLoadingSalesSessionsHistory, setIsLoadingSalesSessionsHistory] =
-    useState<boolean>(true);
-  const [salesSessionsHistoryErrorMessage, setSalesSessionsHistoryErrorMessage] =
-    useState<string>("");
+  
   const [isProductsPanelOpen, setIsProductsPanelOpen] = useState<boolean>(false);
   const [isCashClosuresPanelOpen, setIsCashClosuresPanelOpen] =
     useState<boolean>(false);
@@ -146,8 +142,6 @@ const AdminDashboardPage = (): ReactElement => {
 
   const loadSalesSessionsHistoryFromServer =
     useCallback(async (): Promise<void> => {
-      setIsLoadingSalesSessionsHistory(true);
-      setSalesSessionsHistoryErrorMessage("");
       try {
         const response = await fetch("/api/sales-sessions/history?limit=100", {
           method: "GET",
@@ -159,19 +153,11 @@ const AdminDashboardPage = (): ReactElement => {
           window.location.assign("/login");
           return;
         }
-        if (!response.ok) {
-          setSalesSessionsHistoryErrorMessage(
-            responseBody.message || "No se pudo cargar el historial de sesiones",
-          );
-          return;
+        if (response.ok) {
+          setSalesSessionsHistory(responseBody.salesSessionsHistory ?? []);
         }
-        setSalesSessionsHistory(responseBody.salesSessionsHistory ?? []);
-      } catch {
-        setSalesSessionsHistoryErrorMessage(
-          "No se pudo cargar el historial de sesiones",
-        );
-      } finally {
-        setIsLoadingSalesSessionsHistory(false);
+      } catch (error) {
+        console.error("Error loading sessions history:", error);
       }
     }, []);
 
@@ -346,7 +332,11 @@ const AdminDashboardPage = (): ReactElement => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                      {filteredProductList.map((product) => (
+                      {isLoadingProductList ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">Cargando productos...</td>
+                        </tr>
+                      ) : filteredProductList.map((product) => (
                         <tr key={product.id} className="bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:hover:bg-zinc-800/50">
                           <td className="px-4 py-3 font-medium">{product.name}</td>
                           <td className="px-4 py-3">{product.sku.length > 0 ? product.sku : "—"}</td>
@@ -355,8 +345,8 @@ const AdminDashboardPage = (): ReactElement => {
                           <td className="px-4 py-3 tabular-nums">{product.costPrice === null || product.costPrice === undefined ? "—" : formatArgentinaPesos(product.costPrice)}</td>
                           <td className="px-4 py-3">{product.currentStock}</td>
                           <td className="px-4 py-3 text-right">
-                            <button type="button" onClick={() => openEditProductModal(product)} className="mr-2 rounded-lg border border-zinc-300 px-2 py-1 text-xs">Editar</button>
-                            <button type="button" onClick={() => void handleSoftDeleteProduct(product.id)} className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-red-600">Desactivar</button>
+                            <button type="button" onClick={() => openEditProductModal(product)} className="mr-2 rounded-lg border border-zinc-300 px-2 py-1 text-xs transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800">Editar</button>
+                            <button type="button" onClick={() => void handleSoftDeleteProduct(product.id)} className="rounded-lg border border-zinc-300 px-2 py-1 text-xs text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950">Desactivar</button>
                           </td>
                         </tr>
                       ))}
@@ -392,7 +382,7 @@ const AdminDashboardPage = (): ReactElement => {
                           <td className="px-3 py-3">{sessionRow.operatorFullName ?? sessionRow.userIdentifier}</td>
                           <td className="px-3 py-3">{sessionRow.closedAtIso ? formatArgentinaDateTime(sessionRow.closedAtIso) : "—"}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.totalAmount)}</td>
-                          <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.cashDifference ?? 0)}</td>
+                          <td className="px-3 py-3 text-right tabular-nums font-medium" style={{ color: (sessionRow.cashDifference ?? 0) < 0 ? '#ef4444' : '#10b981' }}>{formatArgentinaPesos(sessionRow.cashDifference ?? 0)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -428,9 +418,13 @@ const AdminDashboardPage = (): ReactElement => {
                         <tr key={sessionRow.sessionIdentifier}>
                           <td className="px-3 py-3">{sessionRow.startedAtIso ? formatArgentinaDateTime(sessionRow.startedAtIso) : "—"}</td>
                           <td className="px-3 py-3">{formatSessionTypeLabel(sessionRow.sessionType)}</td>
-                          <td className="px-3 py-3">{sessionRow.status === "OPEN" ? "Abierta" : "Cerrada"}</td>
+                          <td className="px-3 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${sessionRow.status === "OPEN" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"}`}>
+                              {sessionRow.status === "OPEN" ? "Abierta" : "Cerrada"}
+                            </span>
+                          </td>
                           <td className="px-3 py-3">{sessionRow.operatorFullName ?? sessionRow.userIdentifier}</td>
-                          <td className="px-3 py-3">{sessionRow.notes ?? "—"}</td>
+                          <td className="px-3 py-3 max-w-[200px] truncate">{sessionRow.notes ?? "—"}</td>
                           <td className="px-3 py-3 text-right tabular-nums">{formatArgentinaPesos(sessionRow.totalAmount)}</td>
                         </tr>
                       ))}

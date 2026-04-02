@@ -21,17 +21,16 @@ export function PaymentPanel({
   setSelectedPaymentMethod,
   saleNotesInput,
   setSaleNotesInput,
-  onClose,
   onFinalizeSale,
   isSubmittingSale,
   saleItemsCount,
 }: PaymentPanelProps): ReactElement {
   return (
-    <section className="mt-6 border-t border-zinc-100 pt-6 dark:border-zinc-800">
+    <section className="mt-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Métodos de Pago */}
         <div className="xl:col-span-7">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
             Método de pago
           </h3>
           <div className="mt-3 grid grid-cols-2 gap-3">
@@ -45,15 +44,15 @@ export function PaymentPanel({
                   onClick={() => setSelectedPaymentMethod(method.value)}
                   className={
                     isSelected
-                      ? "flex h-16 w-full items-center justify-center gap-3 rounded-2xl border-2 border-emerald-600 bg-emerald-600 px-4 text-white shadow-lg shadow-emerald-600/30 transition-all scale-[1.02]"
-                      : "flex h-16 w-full items-center justify-center gap-3 rounded-2xl border border-zinc-200/90 bg-zinc-100 px-4 text-zinc-800 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                      ? "flex h-14 w-full items-center justify-center gap-3 rounded-2xl border-2 border-emerald-600 bg-emerald-600 px-4 text-white shadow-lg shadow-emerald-600/30 transition-all scale-[1.02]"
+                      : "flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white px-4 text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   }
                 >
                   <MethodIcon
                     className={
                       isSelected
                         ? "size-5 text-white"
-                        : "size-5 text-zinc-600 dark:text-zinc-300"
+                        : "size-5 text-zinc-500 dark:text-zinc-400"
                     }
                   />
                   <div className="flex items-center gap-2">
@@ -66,11 +65,11 @@ export function PaymentPanel({
           </div>
         </div>
 
-        {/* Observaciones */}
-        <div className="xl:col-span-5">
+        {/* Observaciones - Alineado con la altura de las 2 filas de botones */}
+        <div className="xl:col-span-5 flex flex-col">
           <label
             htmlFor="quick-load-sale-notes"
-            className="text-sm font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500"
+            className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400"
           >
             Observaciones
           </label>
@@ -78,31 +77,40 @@ export function PaymentPanel({
             id="quick-load-sale-notes"
             value={saleNotesInput}
             onChange={(event) => setSaleNotesInput(event.target.value)}
-            placeholder="Nota breve..."
-            className="mt-3 h-16 w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50/80 px-4 py-2 text-sm text-zinc-700 focus:border-emerald-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-200"
+            placeholder="¿Algún detalle para esta venta?..."
+            // h-[124px] equivale a (h-14 * 2) + gap-3
+            className="mt-3 h-[124px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-200 transition-all"
             maxLength={500}
           />
         </div>
       </div>
 
-      {/* Botones de Acción */}
-      <div className="mt-6 flex gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 rounded-xl border border-zinc-200 bg-white py-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-        >
-          Cerrar
-        </button>
+      {/* Botón de Acción Principal */}
+      <div className="mt-8">
         <button
           type="button"
           onClick={() => void onFinalizeSale()}
           disabled={isSubmittingSale || saleItemsCount === 0}
-          className="flex-[2] flex items-center justify-center gap-3 rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow-xl shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-50"
+          className="group relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-2xl bg-emerald-600 py-5 text-xl font-black uppercase tracking-tight text-white shadow-2xl shadow-emerald-600/40 transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
         >
-          <ShoppingCart className="size-6" />
-          {isSubmittingSale ? "Procesando…" : "Cobrar"}
+          {isSubmittingSale ? (
+            <div className="flex items-center gap-3">
+              <div className="size-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              <span>Procesando...</span>
+            </div>
+          ) : (
+            <>
+              <ShoppingCart className="size-7 transition-transform group-hover:-rotate-12" />
+              <span>Finalizar y Cobrar</span>
+            </>
+          )}
         </button>
+        
+        {saleItemsCount === 0 && (
+          <p className="mt-3 text-center text-xs font-medium text-zinc-400">
+            Agregá productos al carrito para habilitar el cobro
+          </p>
+        )}
       </div>
     </section>
   );

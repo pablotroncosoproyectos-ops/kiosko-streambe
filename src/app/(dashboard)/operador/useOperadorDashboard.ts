@@ -9,7 +9,6 @@ import {
   type FormEvent,
 } from "react";
 import type { Product } from "@/types/database";
-import { formatArgentinaPesos } from "@/lib/currencyFormat";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type {
   CartItem,
@@ -29,7 +28,6 @@ import {
   FEEDBACK_DISPLAY_TIME_MILLISECONDS,
   LOW_STOCK_MODAL_PAGE_SIZE,
   LOW_STOCK_PREVIEW_COUNT,
-  MAX_SHIFT_CLOSING_NOTES_INPUT_LENGTH,
   MISSING_OPEN_SESSION_UI_MESSAGE,
 } from "./constants";
 import { isMissingOpenSessionSaleMessage } from "./formatters";
@@ -290,7 +288,7 @@ export function useOperadorDashboard() {
     return activeElement.id !== "scanned-barcode-input";
   };
 
-  const ensureScannerFocus = (): void => {
+  const ensureScannerFocus = useCallback((): void => {
     if (!isSaleModalOpen) {
       return;
     }
@@ -298,7 +296,7 @@ export function useOperadorDashboard() {
       return;
     }
     scannerInputReference.current?.focus();
-  };
+  }, [isSaleModalOpen]);
 
   const mapSelectedPaymentMethodToApiPaymentMethod = (): "CASH" | "DEBIT" | "TRANSFER" | "QR" => {
     if (selectedPaymentMethod === "DEBITO") {
@@ -715,7 +713,7 @@ export function useOperadorDashboard() {
     return () => {
       window.clearInterval(focusInterval);
     };
-  }, [isSaleModalOpen]);
+  }, [isSaleModalOpen, ensureScannerFocus]);
 
   useEffect(() => {
     const previousLength = previousSaleItemsListLengthReference.current;
@@ -898,7 +896,7 @@ export function useOperadorDashboard() {
       ];
     });
   };
-
+  
   function addProductFromQuickLoadWithLineSubtotal(
     product: Product,
     quantity: number,
@@ -912,21 +910,29 @@ export function useOperadorDashboard() {
       setErrorMessage("Cantidad inválida");
       return;
     }
-    if (quantity > product.currentStock) {
-      setErrorMessage("Stock insuficiente para la cantidad seleccionada");
-      return;
-    }
+  
     const nextUnitPrice = lineSubtotal / quantity;
+  
     setSaleItemsList((previousSaleItemsList) => {
       const existingSaleItem = previousSaleItemsList.find(
         (saleItem) => saleItem.productIdentifier === product.id,
       );
+  
       if (existingSaleItem) {
+        // CALCULAR NUEVA CANTIDAD SUMANDO LA ACTUAL + LA NUEVA
+        const newTotalQuantity = existingSaleItem.quantity + quantity;
+  
+        // VALIDAR STOCK ANTES DE ACTUALIZAR
+        if (newTotalQuantity > product.currentStock) {
+          setErrorMessage("Stock insuficiente sumando lo que ya hay en el carrito");
+          return previousSaleItemsList;
+        }
+  
         return previousSaleItemsList.map((saleItem) =>
           saleItem.productIdentifier === product.id
             ? {
                 ...saleItem,
-                quantity,
+                quantity: newTotalQuantity, // AQUÍ SUMAMOS
                 unitPrice: nextUnitPrice,
                 costPrice: product.costPrice,
                 useCostPrice: false,
@@ -934,6 +940,13 @@ export function useOperadorDashboard() {
             : saleItem,
         );
       }
+  
+      // SI NO EXISTE, VALIDAR STOCK DEL NUEVO ITEM
+      if (quantity > product.currentStock) {
+        setErrorMessage("Stock insuficiente");
+        return previousSaleItemsList;
+      }
+  
       return [
         ...previousSaleItemsList,
         {
@@ -947,6 +960,7 @@ export function useOperadorDashboard() {
         },
       ];
     });
+  
     setErrorMessage("");
     showScanFeedback(`Añadido: ${product.name}`);
   }

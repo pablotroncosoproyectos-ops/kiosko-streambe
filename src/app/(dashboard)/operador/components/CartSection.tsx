@@ -33,7 +33,8 @@ export function CartSection({
 }: CartSectionProps): ReactElement {
   return (
     <section className="flex flex-col">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+      {/* Encabezado con Título y Total alineados */}
+      <div className="mb-4 flex items-center justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
             Carrito en vivo
@@ -42,39 +43,40 @@ export function CartSection({
             Ajustá cantidades y confirmá el cobro
           </p>
         </div>
+
+        {/* Total alineado a la derecha */}
+        <div className="rounded-2xl bg-emerald-50 px-4 py-2 border border-emerald-100 shadow-sm dark:bg-emerald-950/40 dark:border-emerald-900/50">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 text-right">
+            Total
+          </span>
+          <span className="text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-400">
+            {formatArgentinaPesos(totalSaleAmount)}
+          </span>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-        {/* Cabecera del Total fija arriba de la tabla */}
-        <div className="flex items-center justify-end border-b border-zinc-200/80 bg-zinc-50/90 px-4 py-2 dark:border-zinc-700 dark:bg-zinc-800/80">
-          <div className="rounded-2xl bg-emerald-50 px-3 py-1 text-right dark:bg-emerald-950/40">
-            <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-              Total
-            </span>
-            <span className="text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-              {formatArgentinaPesos(totalSaleAmount)}
-            </span>
-          </div>
-        </div>
-
-        {/* CONTENEDOR CON SCROLL: Esto evita que el modal se rompa */}
-        <div className="max-h-[280px] overflow-y-auto">
+        {/* 
+            CONTENEDOR CON SCROLL OCULTO 
+            Se eliminaron las clases de scrollbar-thin y se agregaron las de ocultación total
+        */}
+        <div className="max-h-[308px] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <table className="w-full min-w-[280px] border-separate border-spacing-0 text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-zinc-100/95 dark:bg-zinc-800/95">
+            <thead className="sticky top-0 z-10 bg-zinc-100/95 backdrop-blur-sm dark:bg-zinc-800/95">
               <tr>
-                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">
                   Producto
                 </th>
-                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">
                   Cant.
                 </th>
-                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">
                   Total
                 </th>
-                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 font-semibold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">
                   Costo
                 </th>
-                <th className="px-4 py-4 text-right font-semibold text-zinc-700 dark:text-zinc-200">
+                <th className="px-4 py-4 text-right font-semibold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">
                   —
                 </th>
               </tr>
@@ -99,12 +101,12 @@ export function CartSection({
                         : "bg-zinc-50 dark:bg-zinc-800/50"
                     }
                   >
-                    <td className="max-w-[140px] px-4 py-3.5 align-middle">
+                    <td className="max-w-[140px] px-4 py-3.5 align-middle border-b border-zinc-100 dark:border-zinc-800/50">
                       <div className="line-clamp-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {saleItem.name}
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 align-middle">
+                    <td className="px-4 py-3.5 align-middle border-b border-zinc-100 dark:border-zinc-800/50">
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -135,12 +137,12 @@ export function CartSection({
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 align-middle text-sm font-semibold tabular-nums text-zinc-800 dark:text-zinc-200">
+                    <td className="px-4 py-3.5 align-middle text-sm font-semibold tabular-nums text-zinc-800 dark:text-zinc-200 border-b border-zinc-100 dark:border-zinc-800/50">
                       {formatArgentinaPesos(
                         saleItem.quantity * saleItem.unitPrice,
                       )}
                     </td>
-                    <td className="px-4 py-3.5 align-middle">
+                    <td className="px-4 py-3.5 align-middle border-b border-zinc-100 dark:border-zinc-800/50">
                       <input
                         type="checkbox"
                         checked={saleItem.useCostPrice}
@@ -153,7 +155,7 @@ export function CartSection({
                         className="size-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                       />
                     </td>
-                    <td className="px-4 py-3.5 text-right align-middle">
+                    <td className="px-4 py-3.5 text-right align-middle border-b border-zinc-100 dark:border-zinc-800/50">
                       <button
                         type="button"
                         onClick={() =>
@@ -172,9 +174,9 @@ export function CartSection({
         </div>
       </div>
 
-      {/* Paginación más compacta */}
-      <div className="mt-3 flex items-center justify-between px-1 text-xs">
-        <span className="font-medium text-zinc-500">
+      {/* Paginación ULTRA COMPACTA */}
+      <div className="mt-1 flex items-center justify-between px-1 text-[11px]">
+        <span className="font-medium text-zinc-400">
           Pág. {Math.min(cartPageIndex + 1, cartTotalPages)} de {cartTotalPages}
         </span>
         <div className="flex gap-1">
@@ -184,7 +186,7 @@ export function CartSection({
             onClick={() =>
               setCartPageIndex((previous) => Math.max(0, previous - 1))
             }
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-bold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 font-bold shadow-sm disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-800"
           >
             Ant.
           </button>
@@ -196,7 +198,7 @@ export function CartSection({
                 Math.min(cartTotalPages - 1, previous + 1),
               )
             }
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 font-bold shadow-sm disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800"
+            className="rounded-md border border-zinc-200 bg-white px-2 py-0.5 font-bold shadow-sm disabled:opacity-30 dark:border-zinc-700 dark:bg-zinc-800"
           >
             Sig.
           </button>
