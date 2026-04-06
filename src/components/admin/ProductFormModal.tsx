@@ -1031,6 +1031,7 @@ export function ProductFormModal({
                 </div>
 
                 <div className="flex min-w-0 flex-col space-y-3">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     <label className="block">
                       <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         Costo (precio de costo){" "}
@@ -1059,25 +1060,6 @@ export function ProductFormModal({
 
                     <label className="block">
                       <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                        Margen de beneficio (%)
-                      </span>
-                      <input
-                        id="product-margin-percent-input"
-                        name="marginPercent"
-                        type="number"
-                        inputMode="decimal"
-                        step="0.01"
-                        value={productMarginPercentInput}
-                        onChange={(event) =>
-                          setProductMarginPercentInput(event.target.value)
-                        }
-                        className="mt-1 w-full min-w-0 rounded-lg border border-zinc-300/90 bg-zinc-100/80 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-800"
-                        placeholder="0"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         PVP (precio de venta){" "}
                         <span className="text-red-500">*</span>
                       </span>
@@ -1099,6 +1081,26 @@ export function ProductFormModal({
                       <span className="mt-1 block text-xs text-zinc-500">
                         Calculado automáticamente a partir del costo y el margen.
                       </span>
+                    </label>
+                    </div>
+
+                    <label className="block">
+                      <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                        Margen de beneficio (%)
+                      </span>
+                      <input
+                        id="product-margin-percent-input"
+                        name="marginPercent"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.01"
+                        value={productMarginPercentInput}
+                        onChange={(event) =>
+                          setProductMarginPercentInput(event.target.value)
+                        }
+                        className="mt-1 w-full min-w-0 rounded-lg border border-zinc-300/90 bg-zinc-100/80 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-800"
+                        placeholder="0"
+                      />
                     </label>
 
                     <label className="block">
@@ -1383,9 +1385,13 @@ export function ProductFormModal({
                     isUploadingProductImage ||
                     isCreateSubmitBlockedByImage
                   }
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
+                  className="rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-black uppercase tracking-tight text-white shadow-lg shadow-emerald-600/30 transition-all hover:bg-emerald-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
                 >
-                  {isSavingProductForm ? "Guardando…" : "Guardar"}
+                  {isSavingProductForm
+                    ? "Guardando…"
+                    : mode === "create"
+                      ? "Crear"
+                      : "Guardar"}
                 </button>
               </div>
             </div>

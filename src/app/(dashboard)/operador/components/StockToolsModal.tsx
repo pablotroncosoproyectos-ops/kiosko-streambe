@@ -54,7 +54,7 @@ export function StockToolsModal({
       aria-labelledby="stock-tools-title"
     >
       <div
-        className={`flex h-full w-full max-h-dvh flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-zinc-900 md:max-h-[95vh] md:max-w-2xl md:rounded-3xl md:border md:border-white/20 ${
+        className={`flex h-full w-full max-h-dvh flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-zinc-900 md:h-auto md:max-w-md md:rounded-3xl md:border md:border-white/20 ${
           stockToolsModalBackdropVisible
             ? "translate-y-0 scale-100 opacity-100"
             : "translate-y-4 scale-[0.95] opacity-0"
@@ -78,11 +78,11 @@ export function StockToolsModal({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-ms-overflow-style:none] [scrollbar-width:none] md:px-6 md:py-5 [&::-webkit-scrollbar]:hidden">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4">
             <button
               type="button"
               onClick={onOpenCreateProduct}
-              className="rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-400 dark:border-zinc-700 dark:bg-zinc-900"
+              className="rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900"
             >
               <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 Nuevo producto
@@ -91,7 +91,7 @@ export function StockToolsModal({
                 Alta rápida de producto para el operador.
               </p>
             </button>
-            <div className="rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900">
               <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                 Ajustar stock
               </p>

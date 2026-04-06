@@ -91,7 +91,7 @@ export function StockAdjustmentModal({
             </p>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
               Stock actual:{" "}
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
+              <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                 {product.currentStock}
               </span>
             </p>

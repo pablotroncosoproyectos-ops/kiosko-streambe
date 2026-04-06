@@ -121,7 +121,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
                 title={
                   props.isBreakActive
                     ? undefined
-                    : "Disponible solo durante un recreo activo"
+                    : "Inicia un recreo para habilitar el scanner"
                 }
                 className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
                   displayView === "scanner"
