@@ -827,6 +827,23 @@ export function ProductFormModal({
     setComboComponentSelectedId("");
   }
 
+  const [productFormPanelEntered, setProductFormPanelEntered] =
+    useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setProductFormPanelEntered(false);
+      return;
+    }
+    setProductFormPanelEntered(false);
+    const frameId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setProductFormPanelEntered(true);
+      });
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [isOpen]);
+
   if (!isOpen) {
     return null;
   }
@@ -834,13 +851,19 @@ export function ProductFormModal({
   return (
     <>
       <div
-        className={`fixed inset-0 overflow-hidden ${overlayZClass} flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md dark:bg-zinc-950/55 md:p-6`}
+        className={`fixed inset-0 overflow-hidden ${overlayZClass} flex items-center justify-center bg-zinc-950/45 p-0 backdrop-blur-md transition-opacity duration-300 ease-out dark:bg-zinc-950/55 md:p-6`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleDomId}
       >
-        <div className="flex max-h-[min(85vh,100dvh)] w-full max-w-7xl min-w-0 flex-col overflow-hidden rounded-2xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10">
-          <div className="shrink-0 border-b border-zinc-200/80 px-5 py-4 dark:border-zinc-700/80">
+        <div
+          className={`flex h-full w-full max-h-dvh min-w-0 flex-col overflow-hidden border border-white/20 bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-zinc-900 md:h-auto md:max-h-[min(95vh,900px)] md:w-full md:max-w-2xl md:rounded-3xl ${
+            productFormPanelEntered
+              ? "translate-y-0 scale-100 opacity-100"
+              : "translate-y-4 scale-[0.95] opacity-0"
+          }`}
+        >
+          <div className="shrink-0 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <h2
               id={titleDomId}
               className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
@@ -854,8 +877,7 @@ export function ProductFormModal({
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-              <div className="grid min-w-0 gap-6 p-5 md:p-6 lg:grid-cols-2">
-                {/* Columna 1: información e imagen */}
+              <div className="min-w-0 space-y-6 p-5 md:p-6">
                 <div className="min-w-0 space-y-5">
                   <div className="block">
                     <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -1008,9 +1030,7 @@ export function ProductFormModal({
                   </div>
                 </div>
 
-                {/* Columna 2: grid interno — precios/stock | opciones avanzadas */}
-                <div className="grid min-h-0 min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex min-w-0 flex-col space-y-3">
+                <div className="flex min-w-0 flex-col space-y-3">
                     <label className="block">
                       <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         Costo (precio de costo){" "}
@@ -1116,9 +1136,9 @@ export function ProductFormModal({
                         Producto activo
                       </span>
                     </label>
-                  </div>
+                </div>
 
-                  <div className="flex min-h-0 min-w-0 flex-col space-y-3 rounded-xl border border-zinc-200/80 bg-zinc-100/70 p-4 md:p-5 dark:border-zinc-600 dark:bg-zinc-800/50">
+                <div className="flex min-h-0 min-w-0 flex-col space-y-3 rounded-xl border border-zinc-200/80 bg-zinc-100/70 p-4 md:p-5 dark:border-zinc-600 dark:bg-zinc-800/50">
                     <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                       Opciones avanzadas
                     </p>
@@ -1337,12 +1357,11 @@ export function ProductFormModal({
                         </div>
                       </div>
                     ) : null}
-                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="shrink-0 space-y-3 border-t border-zinc-200/80 bg-white/90 px-5 pt-4 pb-4 dark:border-zinc-700/80 dark:bg-zinc-900/95">
+            <div className="shrink-0 space-y-3 border-t border-zinc-100 bg-white px-5 pt-4 pb-4 dark:border-zinc-800 dark:bg-zinc-900">
               {formErrorMessage.length > 0 ? (
                 <p className="text-sm text-red-600 dark:text-red-400" role="alert">
                   {formErrorMessage}

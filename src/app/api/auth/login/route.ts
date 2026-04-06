@@ -60,6 +60,16 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ message: "Credenciales no válidas" }, { status: 401 });
       }
 
+      if (error.message === "Perfil de usuario no disponible") {
+        return NextResponse.json(
+          {
+            message:
+              "Tu cuenta de acceso existe pero no hay fila en la tabla users o falló la consulta. Revisá RLS y que el usuario esté sincronizado.",
+          },
+          { status: 503 },
+        );
+      }
+
       if (error.message === "Inactive account") {
         return NextResponse.json({ message: "Inactive account" }, { status: 403 });
       }

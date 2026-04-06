@@ -12,6 +12,8 @@ export interface User {
   role: "ADMIN" | "OPERATOR";
   isActive: boolean;
   createdAt: string;
+  /** Si el operador puede ver el historial de ventas en Punto de venta (solo aplica a OPERATOR). */
+  canViewSalesHistory?: boolean;
 }
 
 export interface Product {

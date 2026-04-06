@@ -1,15 +1,10 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Product } from "@/types/database";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { generateHistoryTabReportPDF } from "./generateHistoryTabReportPDF";
+import { generateSaleTicketPDF } from "./generateSaleTicketPDF";
 import type {
   CartItem,
   CatalogBrowseMode,
@@ -24,18 +19,14 @@ import type {
 import {
   BREAK_END_TIME_STORAGE_KEY,
   CART_PAGE_SIZE,
+  HISTORY_PAGE_SIZE,
   DEFAULT_BREAK_DURATION_MINUTES,
-  FEEDBACK_DISPLAY_TIME_MILLISECONDS,
-  LOW_STOCK_MODAL_PAGE_SIZE,
-  LOW_STOCK_PREVIEW_COUNT,
   MISSING_OPEN_SESSION_UI_MESSAGE,
 } from "./constants";
 import { isMissingOpenSessionSaleMessage } from "./formatters";
 
 export function useOperadorDashboard() {
-  const scannerInputReference = useRef<HTMLInputElement>(null);
   const previousSaleItemsListLengthReference = useRef<number>(0);
-  const [scannedBarcode, setScannedBarcode] = useState<string>("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<SelectedPaymentMethod>("EFECTIVO");
   const [breakDurationMinutes, setBreakDurationMinutes] = useState<number>(
@@ -69,7 +60,6 @@ export function useOperadorDashboard() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isSessionMissingError, setIsSessionMissingError] =
     useState<boolean>(false);
-  const [scanFeedbackMessage, setScanFeedbackMessage] = useState<string>("");
   const [recentSalesVentaLibre, setRecentSalesVentaLibre] = useState<
     RecentSaleHistoryRecord[]
   >([]);
@@ -81,11 +71,14 @@ export function useOperadorDashboard() {
   >([]);
   const [saleHistoryTab, setSaleHistoryTab] =
     useState<SaleHistoryTab>("ventaTotal");
+  const [historyPageIndex, setHistoryPageIndex] = useState<number>(1);
+  const [historyTicketPdfLoadingSaleId, setHistoryTicketPdfLoadingSaleId] =
+    useState<string | null>(null);
+  const [historyReportPdfLoading, setHistoryReportPdfLoading] =
+    useState<boolean>(false);
 
   const [isSaleModalOpen, setIsSaleModalOpen] = useState<boolean>(false);
   const [saleModalBackdropVisible, setSaleModalBackdropVisible] =
-    useState<boolean>(false);
-  const [isSaleHistoryPanelOpen, setIsSaleHistoryPanelOpen] =
     useState<boolean>(false);
   const [cartPageIndex, setCartPageIndex] = useState<number>(0);
   const [isQuickLoadModalOpen, setIsQuickLoadModalOpen] =
@@ -94,11 +87,20 @@ export function useOperadorDashboard() {
     useState<boolean>(false);
   const [isStockToolsModalOpen, setIsStockToolsModalOpen] =
     useState<boolean>(false);
+  const [stockToolsModalBackdropVisible, setStockToolsModalBackdropVisible] =
+    useState<boolean>(false);
+  const [stockAdjustmentModalBackdropVisible, setStockAdjustmentModalBackdropVisible] =
+    useState<boolean>(false);
   const [isCreateProductModalOpen, setIsCreateProductModalOpen] =
     useState<boolean>(false);
   const [quickLoadModalBackdropVisible, setQuickLoadModalBackdropVisible] =
     useState<boolean>(false);
-  const [isLowStockAllModalOpen, setIsLowStockAllModalOpen] =
+  const [isRecreoModalOpen, setIsRecreoModalOpen] = useState<boolean>(false);
+  const [recreoModalBackdropVisible, setRecreoModalBackdropVisible] =
+    useState<boolean>(false);
+  const [isLowStockDetailModalOpen, setIsLowStockDetailModalOpen] =
+    useState<boolean>(false);
+  const [lowStockDetailModalBackdropVisible, setLowStockDetailModalBackdropVisible] =
     useState<boolean>(false);
   const [quickLoadSearchQuery, setQuickLoadSearchQuery] = useState<string>("");
   const [catalogBrowseMode, setCatalogBrowseMode] =
@@ -138,9 +140,6 @@ export function useOperadorDashboard() {
     useState<boolean>(false);
   const [shiftClosingNotesInput, setShiftClosingNotesInput] =
     useState<string>("");
-  const [lowStockModalPageIndex, setLowStockModalPageIndex] =
-    useState<number>(0);
-
   const totalSaleAmount = useMemo(() => {
     return saleItemsList.reduce((accumulator, saleItem) => {
       return accumulator + saleItem.quantity * saleItem.unitPrice;
@@ -159,25 +158,6 @@ export function useOperadorDashboard() {
     const start = cartPageIndex * CART_PAGE_SIZE;
     return saleItemsList.slice(start, start + CART_PAGE_SIZE);
   }, [cartPageIndex, saleItemsList]);
-
-  const lowStockPreviewList = useMemo(() => {
-    return lowStockProductsList.slice(0, LOW_STOCK_PREVIEW_COUNT);
-  }, [lowStockProductsList]);
-
-  const lowStockModalTotalPages = useMemo(() => {
-    return Math.max(
-      1,
-      Math.ceil(lowStockProductsList.length / LOW_STOCK_MODAL_PAGE_SIZE),
-    );
-  }, [lowStockProductsList.length]);
-
-  const lowStockModalSlice = useMemo(() => {
-    const start = lowStockModalPageIndex * LOW_STOCK_MODAL_PAGE_SIZE;
-    return lowStockProductsList.slice(
-      start,
-      start + LOW_STOCK_MODAL_PAGE_SIZE,
-    );
-  }, [lowStockProductsList, lowStockModalPageIndex]);
 
   const catalogUniqueCategoryList = useMemo(() => {
     const categoryLabelSet = new Set<string>();
@@ -236,6 +216,21 @@ export function useOperadorDashboard() {
     saleHistoryTab,
   ]);
 
+  const historyTotalPages = useMemo(() => {
+    return Math.max(
+      1,
+      Math.ceil(recentSalesForActiveHistoryTab.length / HISTORY_PAGE_SIZE),
+    );
+  }, [recentSalesForActiveHistoryTab.length]);
+
+  const recentSalesHistoryPageSlice = useMemo(() => {
+    const start = (historyPageIndex - 1) * HISTORY_PAGE_SIZE;
+    return recentSalesForActiveHistoryTab.slice(
+      start,
+      start + HISTORY_PAGE_SIZE,
+    );
+  }, [recentSalesForActiveHistoryTab, historyPageIndex]);
+
   const canSubmitStockAdjustment = useMemo(() => {
     if (stockAdjustmentProduct === null || isSavingStockAdjustment) {
       return false;
@@ -268,35 +263,6 @@ export function useOperadorDashboard() {
     }
     return parsedNewStock < stockAdjustmentProduct.currentStock;
   }, [stockAdjustmentProduct, stockAdjustmentNewStockInput]);
-
-  const isUserInteractingWithControls = (): boolean => {
-    const activeElement = document.activeElement;
-    if (!(activeElement instanceof HTMLElement)) {
-      return false;
-    }
-
-    const activeElementTagName = activeElement.tagName.toLowerCase();
-    const isFormControl =
-      activeElementTagName === "input" ||
-      activeElementTagName === "select" ||
-      activeElementTagName === "textarea";
-
-    if (!isFormControl) {
-      return false;
-    }
-
-    return activeElement.id !== "scanned-barcode-input";
-  };
-
-  const ensureScannerFocus = useCallback((): void => {
-    if (!isSaleModalOpen) {
-      return;
-    }
-    if (isUserInteractingWithControls()) {
-      return;
-    }
-    scannerInputReference.current?.focus();
-  }, [isSaleModalOpen]);
 
   const mapSelectedPaymentMethodToApiPaymentMethod = (): "CASH" | "DEBIT" | "TRANSFER" | "QR" => {
     if (selectedPaymentMethod === "DEBITO") {
@@ -474,6 +440,11 @@ export function useOperadorDashboard() {
         window.location.assign("/login");
         return;
       }
+      if (response.status === 409) {
+        await loadOperatorCashSessionStatus();
+        setOpenCashErrorMessage("");
+        return;
+      }
       if (!response.ok) {
         setOpenCashErrorMessage(
           responseBody.message || "No se pudo abrir la caja",
@@ -496,11 +467,26 @@ export function useOperadorDashboard() {
   }
 
   function closeStockAdjustmentModal(): void {
-    setStockAdjustmentProduct(null);
-    setStockAdjustmentNewStockInput("");
-    setStockAdjustmentReasonInput("");
-    setStockAdjustmentErrorMessage("");
-    setIsSavingStockAdjustment(false);
+    setStockAdjustmentModalBackdropVisible(false);
+    window.setTimeout(() => {
+      setStockAdjustmentProduct(null);
+      setStockAdjustmentNewStockInput("");
+      setStockAdjustmentReasonInput("");
+      setStockAdjustmentErrorMessage("");
+      setIsSavingStockAdjustment(false);
+    }, 280);
+  }
+
+  function closeStockToolsModal(): void {
+    setStockToolsModalBackdropVisible(false);
+    window.setTimeout(() => {
+      setIsStockToolsModalOpen(false);
+    }, 280);
+  }
+
+  function closeStockToolsModalImmediately(): void {
+    setStockToolsModalBackdropVisible(false);
+    setIsStockToolsModalOpen(false);
   }
 
   async function handleStockAdjustmentSubmit(): Promise<void> {
@@ -698,28 +684,24 @@ export function useOperadorDashboard() {
     const enterFrame = window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         setSaleModalBackdropVisible(true);
-        scannerInputReference.current?.focus();
       });
     });
     return () => window.cancelAnimationFrame(enterFrame);
   }, [isSaleModalOpen]);
 
   useEffect(() => {
-    if (!isSaleModalOpen) {
-      return;
-    }
-    ensureScannerFocus();
-    const focusInterval = window.setInterval(ensureScannerFocus, 800);
-    return () => {
-      window.clearInterval(focusInterval);
-    };
-  }, [isSaleModalOpen, ensureScannerFocus]);
+    setHistoryPageIndex(1);
+  }, [saleHistoryTab]);
+
+  useEffect(() => {
+    setHistoryPageIndex((previous) => Math.min(previous, historyTotalPages));
+  }, [historyTotalPages]);
 
   useEffect(() => {
     const previousLength = previousSaleItemsListLengthReference.current;
     const currentLength = saleItemsList.length;
 
-    if (isSaleModalOpen || isQuickLoadModalOpen) {
+    if (isQuickLoadModalOpen) {
       if (currentLength < previousLength) {
         const nextTotalPages = Math.max(
           1,
@@ -736,7 +718,7 @@ export function useOperadorDashboard() {
     }
 
     previousSaleItemsListLengthReference.current = currentLength;
-  }, [isQuickLoadModalOpen, isSaleModalOpen, saleItemsList.length]);
+  }, [isQuickLoadModalOpen, saleItemsList.length]);
 
   useEffect(() => {
     if (!isQuickLoadModalOpen) {
@@ -751,6 +733,62 @@ export function useOperadorDashboard() {
     });
     return () => window.cancelAnimationFrame(enterFrame);
   }, [isQuickLoadModalOpen]);
+
+  useEffect(() => {
+    if (!isRecreoModalOpen) {
+      setRecreoModalBackdropVisible(false);
+      return;
+    }
+    setRecreoModalBackdropVisible(false);
+    const enterFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setRecreoModalBackdropVisible(true);
+      });
+    });
+    return () => window.cancelAnimationFrame(enterFrame);
+  }, [isRecreoModalOpen]);
+
+  useEffect(() => {
+    if (!isLowStockDetailModalOpen) {
+      setLowStockDetailModalBackdropVisible(false);
+      return;
+    }
+    setLowStockDetailModalBackdropVisible(false);
+    const enterFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setLowStockDetailModalBackdropVisible(true);
+      });
+    });
+    return () => window.cancelAnimationFrame(enterFrame);
+  }, [isLowStockDetailModalOpen]);
+
+  useEffect(() => {
+    if (!isStockToolsModalOpen) {
+      setStockToolsModalBackdropVisible(false);
+      return;
+    }
+    setStockToolsModalBackdropVisible(false);
+    const enterFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setStockToolsModalBackdropVisible(true);
+      });
+    });
+    return () => window.cancelAnimationFrame(enterFrame);
+  }, [isStockToolsModalOpen]);
+
+  useEffect(() => {
+    if (stockAdjustmentProduct === null) {
+      setStockAdjustmentModalBackdropVisible(false);
+      return;
+    }
+    setStockAdjustmentModalBackdropVisible(false);
+    const enterFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setStockAdjustmentModalBackdropVisible(true);
+      });
+    });
+    return () => window.cancelAnimationFrame(enterFrame);
+  }, [stockAdjustmentProduct]);
 
   useEffect(() => {
     const storedBreakEndTime = localStorage.getItem(BREAK_END_TIME_STORAGE_KEY);
@@ -855,13 +893,6 @@ export function useOperadorDashboard() {
     };
   }, [isBreakActive]);
 
-  const showScanFeedback = (message: string): void => {
-    setScanFeedbackMessage(message);
-    window.setTimeout(() => {
-      setScanFeedbackMessage("");
-    }, FEEDBACK_DISPLAY_TIME_MILLISECONDS);
-  };
-
   const addProductToSaleItemsList = (product: Product): void => {
     setSaleItemsList((previousSaleItemsList) => {
       const existingSaleItem = previousSaleItemsList.find(
@@ -962,7 +993,6 @@ export function useOperadorDashboard() {
     });
   
     setErrorMessage("");
-    showScanFeedback(`Añadido: ${product.name}`);
   }
 
   function tryAddProductBySku(rawSku: string): void {
@@ -978,19 +1008,11 @@ export function useOperadorDashboard() {
 
     if (!product) {
       setErrorMessage("Producto no encontrado para código de barras escaneado");
-      setScannedBarcode("");
       return;
     }
 
     addProductToSaleItemsList(product);
-    showScanFeedback(`Añadido: ${product.name}`);
   }
-
-  const handleScannerSubmit = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    tryAddProductBySku(scannedBarcode);
-    setScannedBarcode("");
-  };
 
   const removeSaleItem = (productIdentifier: string): void => {
     setSaleItemsList((previousSaleItemsList) =>
@@ -1121,7 +1143,6 @@ export function useOperadorDashboard() {
       notes: saleNotesInput.trim().length > 0 ? saleNotesInput.trim() : null,
       saleItemsList: saleItems,
     };
-    console.log("Final Payload to API:", JSON.stringify(payload));
 
     try {
       const response = await fetch("/api/sales", {
@@ -1156,7 +1177,6 @@ export function useOperadorDashboard() {
 
       setSaleItemsList([]);
       setSaleNotesInput("");
-      showScanFeedback("Venta procesada correctamente");
       await loadRecentSalesHistory();
       await loadProductsCatalog();
     } catch {
@@ -1164,20 +1184,68 @@ export function useOperadorDashboard() {
       setIsSessionMissingError(false);
     } finally {
       setIsSubmittingSale(false);
-      ensureScannerFocus();
     }
   };
 
-  function handleGoToOpenSessionFlow(): void {
-    closeSaleModal();
-    setOperatorCashSessionState("noSession");
-    void loadOperatorCashSessionStatus();
+  function openLowStockDetailModal(): void {
+    setIsLowStockDetailModalOpen(true);
   }
 
-  function openLowStockAllModal(): void {
-    setLowStockModalPageIndex(0);
-    setIsLowStockAllModalOpen(true);
-  }
+  const downloadHistorySaleTicketPdf = useCallback(
+    (record: RecentSaleHistoryRecord): void => {
+      if (historyTicketPdfLoadingSaleId !== null || historyReportPdfLoading) {
+        return;
+      }
+      const operationTypeLabel =
+        saleHistoryTab === "ventaLibre"
+          ? "Venta libre"
+          : saleHistoryTab === "recreo"
+            ? "Recreo"
+            : "Venta total";
+
+      setHistoryTicketPdfLoadingSaleId(record.saleIdentifier);
+      window.setTimeout(() => {
+        void (async () => {
+          try {
+            await generateSaleTicketPDF(record, { operationTypeLabel });
+          } finally {
+            setHistoryTicketPdfLoadingSaleId(null);
+          }
+        })();
+      }, 0);
+    },
+    [historyReportPdfLoading, historyTicketPdfLoadingSaleId, saleHistoryTab],
+  );
+
+  const downloadHistoryTabReportPdf = useCallback((): void => {
+    if (historyTicketPdfLoadingSaleId !== null || historyReportPdfLoading) {
+      return;
+    }
+    const tabDisplayName =
+      saleHistoryTab === "ventaLibre"
+        ? "Venta libre"
+        : saleHistoryTab === "recreo"
+          ? "Recreo"
+          : "Venta total";
+
+    setHistoryReportPdfLoading(true);
+    window.setTimeout(() => {
+      void (async () => {
+        try {
+          await generateHistoryTabReportPDF(recentSalesForActiveHistoryTab, {
+            tabDisplayName,
+          });
+        } finally {
+          setHistoryReportPdfLoading(false);
+        }
+      })();
+    }, 0);
+  }, [
+    historyReportPdfLoading,
+    historyTicketPdfLoadingSaleId,
+    recentSalesForActiveHistoryTab,
+    saleHistoryTab,
+  ]);
 
   function closeSaleModal(): void {
     setSaleModalBackdropVisible(false);
@@ -1194,11 +1262,21 @@ export function useOperadorDashboard() {
     }, 280);
   }
 
+  function closeRecreoModal(): void {
+    setRecreoModalBackdropVisible(false);
+    window.setTimeout(() => {
+      setIsRecreoModalOpen(false);
+    }, 280);
+  }
+
+  function closeLowStockDetailModal(): void {
+    setLowStockDetailModalBackdropVisible(false);
+    window.setTimeout(() => {
+      setIsLowStockDetailModalOpen(false);
+    }, 280);
+  }
+
   return {
-    scannerInputReference,
-    previousSaleItemsListLengthReference,
-    scannedBarcode,
-    setScannedBarcode,
     selectedPaymentMethod,
     setSelectedPaymentMethod,
     breakDurationMinutes,
@@ -1235,8 +1313,6 @@ export function useOperadorDashboard() {
     setErrorMessage,
     isSessionMissingError,
     setIsSessionMissingError,
-    scanFeedbackMessage,
-    setScanFeedbackMessage,
     recentSalesVentaLibre,
     setRecentSalesVentaLibre,
     recentSalesRecreo,
@@ -1249,8 +1325,6 @@ export function useOperadorDashboard() {
     setIsSaleModalOpen,
     saleModalBackdropVisible,
     setSaleModalBackdropVisible,
-    isSaleHistoryPanelOpen,
-    setIsSaleHistoryPanelOpen,
     cartPageIndex,
     setCartPageIndex,
     isQuickLoadModalOpen,
@@ -1259,12 +1333,17 @@ export function useOperadorDashboard() {
     setIsBarcodeCameraScannerOpen,
     isStockToolsModalOpen,
     setIsStockToolsModalOpen,
+    stockToolsModalBackdropVisible,
+    stockAdjustmentModalBackdropVisible,
     isCreateProductModalOpen,
     setIsCreateProductModalOpen,
     quickLoadModalBackdropVisible,
     setQuickLoadModalBackdropVisible,
-    isLowStockAllModalOpen,
-    setIsLowStockAllModalOpen,
+    isRecreoModalOpen,
+    setIsRecreoModalOpen,
+    recreoModalBackdropVisible,
+    isLowStockDetailModalOpen,
+    lowStockDetailModalBackdropVisible,
     quickLoadSearchQuery,
     setQuickLoadSearchQuery,
     catalogBrowseMode,
@@ -1299,18 +1378,21 @@ export function useOperadorDashboard() {
     setIsSubmittingCloseCash,
     shiftClosingNotesInput,
     setShiftClosingNotesInput,
-    lowStockModalPageIndex,
-    setLowStockModalPageIndex,
     totalSaleAmount,
     lowStockProductsList,
     cartTotalPages,
     pagedCartItems,
-    lowStockPreviewList,
-    lowStockModalTotalPages,
-    lowStockModalSlice,
     catalogUniqueCategoryList,
     quickLoadDisplayedProducts,
     recentSalesForActiveHistoryTab,
+    recentSalesHistoryPageSlice,
+    historyPageIndex,
+    setHistoryPageIndex,
+    historyTotalPages,
+    downloadHistorySaleTicketPdf,
+    historyTicketPdfLoadingSaleId,
+    downloadHistoryTabReportPdf,
+    historyReportPdfLoading,
     canSubmitStockAdjustment,
     stockAdjustmentIsReduction,
     loadProductsCatalog,
@@ -1320,24 +1402,25 @@ export function useOperadorDashboard() {
     handleOpenCashSessionSubmit,
     openStockAdjustmentModal,
     closeStockAdjustmentModal,
+    closeStockToolsModal,
+    closeStockToolsModalImmediately,
     handleStockAdjustmentSubmit,
     openCreateProductModal,
     openCloseCashModal,
     closeCloseCashModal,
     handleSubmitCloseCash,
-    showScanFeedback,
     addProductFromQuickLoadWithLineSubtotal,
     tryAddProductBySku,
-    handleScannerSubmit,
     removeSaleItem,
     updateSaleItemQuantity,
     toggleSaleItemUseCostPrice,
     handleStartBreak,
     handleCancelBreak,
     handleFinalizeSale,
-    handleGoToOpenSessionFlow,
-    openLowStockAllModal,
+    openLowStockDetailModal,
     closeSaleModal,
     closeQuickLoadModal,
+    closeRecreoModal,
+    closeLowStockDetailModal,
   };
 }

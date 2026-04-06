@@ -37,18 +37,24 @@ function mapUserDatabaseRowToUserProfile(userDatabaseRow: {
   role: string;
   is_active: boolean;
   created_at: string;
+  can_view_sales_history?: boolean | null;
 }): User {
   if (userDatabaseRow.role !== "ADMIN" && userDatabaseRow.role !== "OPERATOR") {
     throw new Error("Credenciales no válidas");
   }
 
+  const role = userDatabaseRow.role as User["role"];
   return {
     id: userDatabaseRow.id,
     email: userDatabaseRow.email,
     fullName: userDatabaseRow.full_name,
-    role: userDatabaseRow.role,
+    role,
     isActive: userDatabaseRow.is_active,
     createdAt: userDatabaseRow.created_at,
+    canViewSalesHistory:
+      role === "ADMIN"
+        ? true
+        : Boolean(userDatabaseRow.can_view_sales_history),
   };
 }
 
@@ -59,12 +65,12 @@ async function fetchUserProfileUsingSupabaseClient(
   const { data: userDatabaseRow, error: userProfileError } =
     await supabaseServerClient
       .from("users")
-      .select("id, email, full_name, role, is_active, created_at")
+      .select("*")
       .eq("id", authenticatedUserIdentifier)
       .single();
 
   if (userProfileError || !userDatabaseRow) {
-    throw new Error("Credenciales no válidas");
+    throw new Error("Perfil de usuario no disponible");
   }
 
   return mapUserDatabaseRowToUserProfile(
@@ -75,6 +81,7 @@ async function fetchUserProfileUsingSupabaseClient(
       role: string;
       is_active: boolean;
       created_at: string;
+      can_view_sales_history?: boolean | null;
     },
   );
 }

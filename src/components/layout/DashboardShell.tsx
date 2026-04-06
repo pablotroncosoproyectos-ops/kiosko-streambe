@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type ReactElement,
   type ReactNode,
@@ -19,11 +20,15 @@ import {
   X,
 } from "lucide-react";
 import { SESSION_LOGOUT_BUTTON_CLASS_NAME } from "@/constants/sessionLogoutButton";
+import {
+  DashboardSessionProvider,
+} from "@/components/layout/dashboard-session-context";
 
 interface MeApiResponse {
   userProfile?: {
     fullName: string;
     role: "ADMIN" | "OPERATOR" | string;
+    canViewSalesHistory?: boolean;
   };
   message?: string;
 }
@@ -42,7 +47,6 @@ const ADMIN_NAV_ITEMS: DashboardNavItem[] = [
 
 const OPERATOR_NAV_ITEMS: DashboardNavItem[] = [
   { href: "/operador", label: "Punto de venta", icon: ShoppingCart },
-  { href: "/operador?tools=stock", label: "Crear o Ajustar stock", icon: Package },
 ];
 
 function formatArgentinaDateTimeMedium(date: Date): string {
@@ -65,6 +69,8 @@ export function DashboardShell({
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] =
     useState<boolean>(false);
   const [isProfileRequestCompleted, setIsProfileRequestCompleted] =
+    useState<boolean>(false);
+  const [canViewSalesHistory, setCanViewSalesHistory] =
     useState<boolean>(false);
 
   const isOperadorRoute = pathname === "/operador";
@@ -97,11 +103,16 @@ export function DashboardShell({
         } else {
           setUserRole(null);
         }
+        setCanViewSalesHistory(
+          Boolean(responseBody.userProfile.canViewSalesHistory),
+        );
       } else {
         setUserRole(null);
+        setCanViewSalesHistory(false);
       }
     } catch {
       setUserRole(null);
+      setCanViewSalesHistory(false);
     } finally {
       setIsProfileRequestCompleted(true);
     }
@@ -137,7 +148,17 @@ export function DashboardShell({
 
   const logoHref = userRole === "OPERATOR" ? "/operador" : "/dashboard";
 
+  const dashboardSessionValue = useMemo(
+    () => ({
+      userRole,
+      canViewSalesHistory,
+      isProfileReady: isProfileRequestCompleted,
+    }),
+    [canViewSalesHistory, isProfileRequestCompleted, userRole],
+  );
+
   return (
+    <DashboardSessionProvider value={dashboardSessionValue}>
     <div className="flex h-screen min-h-0 flex-col bg-slate-50 md:flex-row dark:bg-zinc-950">
       {isMobileSidebarOpen ? (
         <button
@@ -186,7 +207,7 @@ export function DashboardShell({
           </div>
         ) : null}
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {!isProfileRequestCompleted ? (
             <div className="space-y-2 px-1 py-2">
               <div className="h-10 animate-pulse rounded-lg bg-zinc-800" />
@@ -219,6 +240,17 @@ export function DashboardShell({
             })
           )}
         </nav>
+
+        <div className="mt-auto shrink-0 border-t border-zinc-700/90 p-3 md:hidden">
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className={SESSION_LOGOUT_BUTTON_CLASS_NAME}
+          >
+            <LogOut className="size-4" aria-hidden />
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -246,7 +278,7 @@ export function DashboardShell({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+          <div className="hidden flex-wrap items-center justify-end gap-2 sm:gap-3 md:flex">
             <button
               type="button"
               onClick={() => void handleLogout()}
@@ -261,13 +293,14 @@ export function DashboardShell({
         <div
           className={
             isOperadorRoute
-              ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-zinc-950"
-              : "min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-zinc-950 md:px-6"
+              ? "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden bg-slate-50 [-ms-overflow-style:none] [scrollbar-width:none] dark:bg-zinc-950 [&::-webkit-scrollbar]:hidden"
+              : "min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-6 dark:bg-zinc-950 md:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           }
         >
           {children}
         </div>
       </div>
     </div>
+    </DashboardSessionProvider>
   );
 }

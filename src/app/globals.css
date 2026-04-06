@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+@keyframes recreo-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-recreo-pulse {
+  animation: recreo-pulse 2s ease-in-out infinite;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;

@@ -8,8 +8,11 @@ import type { CatalogBrowseMode, CartItem, SelectedPaymentMethod } from "../type
 import { CatalogSection } from "./CatalogSection";
 import { CartSection } from "./CartSection";
 import { PaymentPanel } from "./PaymentPanel";
+import { QuickLoadScannerSection } from "./QuickLoadScannerSection";
 
 export interface QuickLoadModalProps {
+  /** Si es falso, el modo escáner del header queda deshabilitado. */
+  isBreakActive: boolean;
   quickLoadModalBackdropVisible: boolean;
   onClose: () => void;
   catalogBrowseMode: CatalogBrowseMode;
@@ -20,6 +23,8 @@ export interface QuickLoadModalProps {
   quickLoadSearchQuery: string;
   setQuickLoadSearchQuery: Dispatch<SetStateAction<string>>;
   quickLoadDisplayedProducts: Product[];
+  /** Catálogo para resolver SKU en modo scanner; si no se envía, se usa quickLoadDisplayedProducts. */
+  productsForBarcodeLookup?: Product[];
   isLoadingProductsCatalog: boolean;
   onAddProductFromQuickLoad: (product: Product, quantity: number, lineSubtotal: number) => void;
   totalSaleAmount: number;
@@ -56,6 +61,12 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  /** Sin recreo activo no se muestra el escáner aunque el estado interno siga en "scanner". */
+  const displayView: "manual" | "scanner" =
+    !props.isBreakActive && activeView === "scanner"
+      ? "manual"
+      : activeView;
+
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-0 backdrop-blur-md transition-opacity duration-300 ease-out md:p-6 ${
@@ -75,16 +86,17 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
           {/* Bloque Izquierdo: Selectores de Modo (Manual vs Scanner) */}
           <div className="flex items-center justify-between gap-3 md:justify-start">
             <div className="flex items-center gap-2">
-              <button 
+              <button
+                type="button"
                 onClick={() => setActiveView("manual")}
                 className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all ${
-                  activeView === "manual" 
+                  displayView === "manual"
                   ? "bg-emerald-50 dark:bg-emerald-500/10" 
                   : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
               >
                 <div className={`flex size-9 items-center justify-center rounded-lg transition-colors ${
-                  activeView === "manual" 
+                  displayView === "manual"
                   ? "bg-emerald-500 text-white" 
                   : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
                 }`}>
@@ -92,22 +104,33 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
                 </div>
                 <div className="text-left leading-tight">
                   <h2 className={`text-[13px] font-bold md:text-sm ${
-                    activeView === "manual" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100"
+                    displayView === "manual" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100"
                   }`}>Carga rápida</h2>
                   <p className="text-[10px] text-zinc-500">Manual</p>
                 </div>
               </button>
 
-              <button 
-                onClick={() => setActiveView("scanner")}
-                className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all ${
-                  activeView === "scanner" 
+              <button
+                type="button"
+                disabled={!props.isBreakActive}
+                onClick={() => {
+                  if (props.isBreakActive) {
+                    setActiveView("scanner");
+                  }
+                }}
+                title={
+                  props.isBreakActive
+                    ? undefined
+                    : "Disponible solo durante un recreo activo"
+                }
+                className={`group flex items-center gap-2 rounded-xl p-1 pr-3 transition-all disabled:cursor-not-allowed disabled:opacity-40 ${
+                  displayView === "scanner"
                   ? "bg-blue-50 dark:bg-blue-500/10" 
                   : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
               >
                 <div className={`flex size-9 items-center justify-center rounded-lg transition-colors ${
-                  activeView === "scanner" 
+                  displayView === "scanner"
                   ? "bg-blue-500 text-white" 
                   : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
                 }`}>
@@ -115,7 +138,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
                 </div>
                 <div className="text-left leading-tight">
                   <h2 className={`text-[13px] font-bold md:text-sm ${
-                    activeView === "scanner" ? "text-blue-600 dark:text-blue-400" : "text-zinc-900 dark:text-zinc-100"
+                    displayView === "scanner" ? "text-blue-600 dark:text-blue-400" : "text-zinc-900 dark:text-zinc-100"
                   }`}>Scanner QR</h2>
                   <p className="text-[10px] text-zinc-500">Automático</p>
                 </div>
@@ -128,7 +151,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
           </div>
 
           {/* Bloque Derecho: Controles de búsqueda (Solo en Manual) */}
-          {activeView === "manual" && (
+          {displayView === "manual" && (
             <div className="flex w-full items-center gap-3 md:ml-auto md:w-auto md:flex-1 md:justify-end">
               {/* Toggle Categorías/Buscador (Escritorio) */}
               <div className="hidden items-center rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800/50 md:flex">
@@ -198,7 +221,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
                       value={props.quickLoadSearchQuery}
                       onChange={(e) => props.setQuickLoadSearchQuery(e.target.value)}
                       placeholder="Buscar producto..."
-                      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-800 outline-none focus:border-emerald-500 md:py-2"
+                      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-100 md:py-2"
                     />
                   </div>
                 )}
@@ -238,7 +261,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
 
         {/* --- CONTENIDO PRINCIPAL --- */}
         <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-12">
-          {activeView === "manual" ? (
+          {displayView === "manual" ? (
             <>
               {/* Sección de Catálogo */}
               <section className={`flex flex-col h-full min-h-0 border-r border-zinc-100 dark:border-zinc-800 lg:col-span-5 xl:col-span-4 overflow-hidden ${
@@ -284,29 +307,14 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
               </section>
             </>
           ) : (
-            /* CONTENIDO DEL SCANNER (Placeholder) */
-            <section className="col-span-12 flex items-center justify-center bg-zinc-50/30 dark:bg-zinc-900">
-              <div className="max-w-md px-6 text-center">
-                <div className="relative mx-auto mb-6 flex size-24 items-center justify-center">
-                  <div className="absolute inset-0 animate-ping rounded-full bg-blue-500/20"></div>
-                  <div className="relative flex size-16 items-center justify-center rounded-2xl bg-blue-500 text-white shadow-xl">
-                    <ScanLine className="size-10" />
-                  </div>
-                </div>
-                <h3 className="mb-2 text-xl font-bold text-zinc-900 dark:text-zinc-100">Modo Scanner Activo</h3>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  Escanea el código del ticket o del producto para procesar la carga automáticamente.
-                </p>
-                <div className="mt-8 flex justify-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:bg-blue-500/10">
-                    Acepta QR
-                  </span>
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:bg-blue-500/10">
-                    Acepta Barcode
-                  </span>
-                </div>
-              </div>
-            </section>
+            <QuickLoadScannerSection
+              isActive={displayView === "scanner"}
+              modalVisible={props.quickLoadModalBackdropVisible}
+              productsForLookup={
+                props.productsForBarcodeLookup ?? props.quickLoadDisplayedProducts
+              }
+              onAddProduct={props.onAddProductFromQuickLoad}
+            />
           )}
         </main>
       </div>

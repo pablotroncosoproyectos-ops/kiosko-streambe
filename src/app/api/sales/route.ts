@@ -20,8 +20,6 @@ interface ProcessSaleRequestBody {
 }
 
 function buildSanitizedErrorResponse(error: unknown): NextResponse {
-  console.error("[api/sales] Detailed error:", error);
-
   if (!(error instanceof Error)) {
     return NextResponse.json({ message: "No se pudo procesar la venta" }, { status: 500 });
   }

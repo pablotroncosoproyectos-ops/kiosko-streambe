@@ -74,9 +74,6 @@ function parseHistoryScope(raw: string | null): HistoryScope | null {
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
-    // #region agent log
-    fetch("http://127.0.0.1:7888/ingest/8d762643-e6ea-41f9-89b3-beaad44b477c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"88aedb"},body:JSON.stringify({sessionId:"88aedb",runId:"initial",hypothesisId:"H1-H4",location:"src/app/api/sales/recent/route.ts:GET:start",message:"GET /api/sales/recent start",data:{url:request.url},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const supabaseServerClient =
       await requireAuthenticatedAuthorizedSupabaseClient(["ADMIN", "OPERATOR"]);
 
@@ -260,14 +257,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     });
 
-    // #region agent log
-    fetch("http://127.0.0.1:7888/ingest/8d762643-e6ea-41f9-89b3-beaad44b477c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"88aedb"},body:JSON.stringify({sessionId:"88aedb",runId:"initial",hypothesisId:"H1-H4",location:"src/app/api/sales/recent/route.ts:GET:success",message:"GET /api/sales/recent success",data:{historyScope,saleRowsCount:saleRows.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     return NextResponse.json({ recentSalesHistory, historyScope }, { status: 200 });
   } catch (error: unknown) {
-    // #region agent log
-    fetch("http://127.0.0.1:7888/ingest/8d762643-e6ea-41f9-89b3-beaad44b477c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"88aedb"},body:JSON.stringify({sessionId:"88aedb",runId:"initial",hypothesisId:"H1-H4",location:"src/app/api/sales/recent/route.ts:GET:catch",message:"GET /api/sales/recent failed",data:{errorMessage:error instanceof Error ? error.message : "unknown"},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (error instanceof Error) {
       if (error.message === "Authentication required") {
         return NextResponse.json(

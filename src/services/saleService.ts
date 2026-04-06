@@ -79,6 +79,8 @@ export async function processSale(
     quantity: saleItem.quantity,
   }));
 
+  // La RPC `process_sale` en Postgres debe resolver la sesión VENTA_LIBRE con la caja global
+  // del kiosco (p. ej. `public.kiosko_open_venta_libre_session_id()`), no solo por auth.uid().
   const { data, error: processSaleError } = await supabaseServerClient.rpc(
     "process_sale",
     {
@@ -94,14 +96,6 @@ export async function processSale(
       hint?: string;
       code?: string;
     };
-
-    console.error("[saleService] process_sale RPC error details:", {
-      message: processSaleError.message,
-      details: rpcErrorUnknown.details ?? null,
-      hint: rpcErrorUnknown.hint ?? null,
-      code: rpcErrorUnknown.code ?? null,
-    });
-    console.error("[saleService] process_sale RPC full error object:", processSaleError);
 
     const rpcErrorMessage = processSaleError.message.toLowerCase();
     if (rpcErrorMessage.includes("insufficient stock")) {

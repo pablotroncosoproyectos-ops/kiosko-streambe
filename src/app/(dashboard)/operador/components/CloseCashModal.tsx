@@ -5,6 +5,9 @@ import type { Dispatch, ReactElement, SetStateAction } from "react";
 import { formatArgentinaPesos } from "@/lib/currencyFormat";
 import { MAX_SHIFT_CLOSING_NOTES_INPUT_LENGTH } from "../constants";
 
+const MODAL_FIELD_CLASS =
+  "rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-100";
+
 export interface CloseCashModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -120,7 +123,7 @@ export function CloseCashModal({
                   onChange={(event) =>
                     setOpeningBalanceCashInput(event.target.value)
                   }
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 dark:border-zinc-600 dark:bg-zinc-800"
+                  className={`mt-1 w-full ${MODAL_FIELD_CLASS}`}
                 />
               </label>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -130,7 +133,7 @@ export function CloseCashModal({
                   inputMode="decimal"
                   value={expensesCashInput}
                   onChange={(event) => setExpensesCashInput(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 dark:border-zinc-600 dark:bg-zinc-800"
+                  className={`mt-1 w-full ${MODAL_FIELD_CLASS}`}
                 />
               </label>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -143,7 +146,7 @@ export function CloseCashModal({
                     setPhysicalCashInput(event.target.value)
                   }
                   placeholder="0,00"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 dark:border-zinc-600 dark:bg-zinc-800"
+                  className={`mt-1 w-full ${MODAL_FIELD_CLASS}`}
                 />
               </label>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -156,7 +159,7 @@ export function CloseCashModal({
                   rows={3}
                   maxLength={MAX_SHIFT_CLOSING_NOTES_INPUT_LENGTH}
                   placeholder="Incidencias, diferencias, comentarios del cierre…"
-                  className="mt-1 w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500 dark:border-zinc-600 dark:bg-zinc-800"
+                  className={`mt-1 w-full resize-y ${MODAL_FIELD_CLASS}`}
                 />
               </label>
             </>

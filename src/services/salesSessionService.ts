@@ -322,15 +322,22 @@ async function sumCashSalesForSession(
   return cashSalesTotal;
 }
 
+/**
+ * Sesión de caja del turno (VENTA_LIBRE abierta): una sola por kiosco, compartida entre
+ * ADMIN y OPERATOR. No filtra por `user_id` (quien abrió queda en la fila para auditoría).
+ */
 export async function getOpenSessionCashSummaryForOperator(
   supabaseClient: SupabaseClient,
-  authenticatedUserIdentifier: string,
+  _authenticatedUserIdentifier: string,
 ): Promise<OpenSessionCashSummaryPayload | null> {
+  const ventaLibreType = normalizeSessionTypeForDatabase(VENTA_LIBRE_SESSION_TYPE);
+  const openStatus = normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS);
+
   const { data: openSessionRow, error: fetchError } = await supabaseClient
     .from("sales_sessions")
     .select("id, session_type, opening_balance, expenses_total")
-    .eq("user_id", authenticatedUserIdentifier)
-    .eq("status", normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS))
+    .eq("session_type", ventaLibreType)
+    .eq("status", openStatus)
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -382,7 +389,7 @@ export async function openOperatorCashSession(
     await supabaseClient
       .from("sales_sessions")
       .select("id")
-      .eq("user_id", authenticatedUserIdentifier)
+      .eq("session_type", ventaLibreSessionType)
       .eq("status", openSessionStatus)
       .limit(1)
       .maybeSingle();
@@ -409,7 +416,6 @@ export async function openOperatorCashSession(
     .single();
 
   if (insertError || !insertedRow || typeof insertedRow.id !== "string") {
-    console.error("openOperatorCashSession insert:", insertError);
     throw new Error("Unable to open cash session");
   }
 
@@ -425,7 +431,7 @@ export interface CloseSessionCashPayload {
 
 export async function closeOpenSessionWithCashArqueo(
   supabaseClient: SupabaseClient,
-  authenticatedUserIdentifier: string,
+  _authenticatedUserIdentifier: string,
   physicalCashAmount: number,
   optionalOpeningBalance: number | null,
   optionalExpensesTotal: number | null,
@@ -441,10 +447,14 @@ export async function closeOpenSessionWithCashArqueo(
     CLOSED_SESSION_STATUS,
   );
 
+  const ventaLibreSessionType = normalizeSessionTypeForDatabase(
+    VENTA_LIBRE_SESSION_TYPE,
+  );
+
   const { data: openSessionRow, error: fetchError } = await supabaseClient
     .from("sales_sessions")
     .select("id, opening_balance, expenses_total")
-    .eq("user_id", authenticatedUserIdentifier)
+    .eq("session_type", ventaLibreSessionType)
     .eq("status", openSessionStatus)
     .order("started_at", { ascending: false })
     .limit(1)
@@ -502,7 +512,6 @@ export async function closeOpenSessionWithCashArqueo(
     .eq("status", openSessionStatus);
 
   if (updateError) {
-    console.error("closeOpenSessionWithCashArqueo update:", updateError);
     throw new Error("Unable to close session");
   }
 

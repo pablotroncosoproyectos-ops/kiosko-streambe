@@ -9,24 +9,30 @@ import {
   Warehouse,
 } from "lucide-react";
 import type { ReactElement } from "react";
+import { useDashboardSession } from "@/components/layout/dashboard-session-context";
 import { ModalsContainer } from "./components/ModalsContainer";
-import { LOW_STOCK_PREVIEW_COUNT } from "./constants";
-import { formatRemainingTime } from "./formatters";
 import { useOperadorDashboard } from "./useOperadorDashboard";
 
 const OperadorDashboardPage = (): ReactElement => {
   const dashboard = useOperadorDashboard();
+  const { userRole, isProfileReady } = useDashboardSession();
+  const showHistorialCard = isProfileReady && userRole === "ADMIN";
+  const dashboardCardCount = 3 + (showHistorialCard ? 1 : 0);
+  const dashboardGridClassName =
+    dashboardCardCount >= 4
+      ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+      : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3";
 
   return (
-    <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-zinc-950">
+    <main className="flex min-h-0 w-full flex-1 flex-col bg-slate-50 [-ms-overflow-style:none] [scrollbar-width:none] dark:bg-zinc-950 [&::-webkit-scrollbar]:hidden">
       {dashboard.operatorCashSessionState === "loading" ? (
-        <div className="flex flex-1 flex-col items-center justify-center py-24">
+        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto py-24 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Cargando sesión…
           </p>
         </div>
       ) : dashboard.operatorCashSessionState === "noSession" ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
+        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="w-full max-w-md rounded-2xl border border-white/25 bg-white/85 p-8 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10 md:p-10">
             <div className="flex flex-col items-center text-center">
               <div className="mb-4 rounded-2xl bg-amber-100/80 p-4 dark:bg-amber-950/50">
@@ -76,190 +82,138 @@ const OperadorDashboardPage = (): ReactElement => {
           </div>
         </div>
       ) : (
-        <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
-          <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
+        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col min-h-0 gap-4 py-4 md:py-6">
+          <div className="flex w-full shrink-0 flex-nowrap items-start justify-between gap-3 px-4 md:px-6">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
               <div className="rounded-lg bg-white p-2 shadow-sm dark:bg-zinc-900">
                 <ShoppingCart className="size-6 text-zinc-700 dark:text-zinc-200" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 md:text-2xl">
-                  Punto de venta
-                </h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 md:text-2xl">
+                    Punto de venta
+                  </h1>
+                  {dashboard.isBreakActive ? (
+                    <span
+                      className="inline-flex shrink-0 items-center rounded-full bg-blue-600/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 animate-recreo-pulse dark:bg-blue-500/20 dark:text-blue-300"
+                      role="status"
+                    >
+                      RECREO INICIADO
+                    </span>
+                  ) : null}
+                </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 md:text-sm">
-                  Turno activo — sin desplazamiento de página
+                  Turno activo — desplazá el contenido si hace falta
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void dashboard.openCloseCashModal()}
+              className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950 shadow-sm hover:bg-amber-100 sm:px-4 sm:py-2.5 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60"
+            >
+              <Banknote className="size-4 shrink-0" aria-hidden />
+              Cerrar caja
+            </button>
+          </div>
+
+          <div className="flex flex-1 min-h-0 flex-col items-center justify-center overflow-y-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 md:px-6">
+            <div
+              className={`grid w-full items-stretch justify-items-stretch gap-4 ${dashboardGridClassName}`}
+            >
+              <button
+                type="button"
+                onClick={() => dashboard.setIsRecreoModalOpen(true)}
+                className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-blue-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <Clock
+                  className="size-14 shrink-0 text-blue-600 dark:text-blue-500"
+                  aria-hidden
+                />
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Turno y recreo
+                </span>
+                <p className="max-w-sm px-1 text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                  Gestión de recreos y tiempo restante del día.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => dashboard.setIsQuickLoadModalOpen(true)}
+                className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-orange-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <LayoutGrid
+                  className="size-14 shrink-0 text-orange-600 dark:text-orange-500"
+                  aria-hidden
+                />
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Carga rápida
+                </span>
+                <p className="max-w-sm px-1 text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                  Venta por categorías e imágenes del catálogo.
+                </p>
+              </button>
+
               <button
                 type="button"
                 onClick={() => dashboard.setIsStockToolsModalOpen(true)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-amber-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <Warehouse className="size-4 shrink-0" aria-hidden />
-                Crear o Ajustar stock
-              </button>
-              <button
-                type="button"
-                onClick={() => void dashboard.openCloseCashModal()}
-                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-950 shadow-sm hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-900/60"
-              >
-                <Banknote className="size-4 shrink-0" aria-hidden />
-                Cerrar caja
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
-            <div className="flex min-h-[220px] flex-col rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                <Clock
-                  className="size-12 shrink-0 text-zinc-700 dark:text-zinc-200"
+                <Warehouse
+                  className="size-14 shrink-0 text-amber-600 dark:text-amber-500"
                   aria-hidden
                 />
-                <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                  Turno y recreo
-                </h3>
-                {dashboard.recreoBreakDisplay !== null ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Recreos hoy (colegio):{" "}
-                    <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                      {dashboard.recreoBreakDisplay.recreoSessionsStartedTodayCount}{" "}
-                      / {dashboard.recreoBreakDisplay.maxBreaksPerDay}
-                    </span>
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Ajuste de stock
+                </span>
+                <p className="max-w-sm px-1 text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                  Altas y correcciones de inventario al instante.
+                </p>
+              </button>
+
+              {showHistorialCard ? (
+                <button
+                  type="button"
+                  onClick={() => dashboard.setIsSaleModalOpen(true)}
+                  className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-emerald-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <ShoppingCart
+                    className="size-14 shrink-0 text-emerald-600 dark:text-emerald-500"
+                    aria-hidden
+                  />
+                  <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                    Historial de operaciones
+                  </span>
+                  <p className="max-w-sm px-1 text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                    Consulta de ventas y movimientos del turno.
                   </p>
-                ) : null}
-                {dashboard.recreoStartErrorMessage.length > 0 ? (
-                  <p className="max-w-md rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-                    {dashboard.recreoStartErrorMessage}
-                  </p>
-                ) : null}
-                <div className="flex w-full max-w-xs flex-col items-center gap-4">
-                  <div className="flex flex-wrap items-end justify-center gap-3">
-                    <label className="flex flex-col items-center gap-1">
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                        Duración (min)
-                      </span>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={dashboard.breakDurationMinutes}
-                        onChange={(event) =>
-                          dashboard.setBreakDurationMinutes(
-                            Number.parseInt(event.target.value || "0", 10),
-                          )
-                        }
-                        className="w-36 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-center text-sm outline-none ring-zinc-900/10 transition focus:ring-2 focus:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:focus:ring-zinc-100"
-                      />
-                    </label>
-                    {!dashboard.isBreakActive &&
-                    dashboard.remainingTimeSeconds === 0 ? (
-                      <button
-                        type="button"
-                        disabled={dashboard.isStartingRecreoSession}
-                        onClick={() => void dashboard.handleStartBreak()}
-                        className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                      >
-                        {dashboard.isStartingRecreoSession
-                          ? "Registrando…"
-                          : "Iniciar recreo"}
-                      </button>
-                    ) : null}
-                  </div>
-                  {dashboard.isBreakActive ||
-                  dashboard.remainingTimeSeconds > 0 ? (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                        Termina en:{" "}
-                        {formatRemainingTime(dashboard.remainingTimeSeconds)}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={dashboard.handleCancelBreak}
-                        className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                </button>
+              ) : null}
             </div>
 
-            <button
-              type="button"
-              onClick={() => dashboard.setIsQuickLoadModalOpen(true)}
-              className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-amber-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <LayoutGrid
-                className="size-14 shrink-0 text-amber-600"
-                aria-hidden
-              />
-              <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Carga rápida
-              </span>
-              <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
-                Catálogo visual por categoría con imágenes
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => dashboard.setIsSaleModalOpen(true)}
-              className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-emerald-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-            >
-              <ShoppingCart
-                className="size-14 shrink-0 text-emerald-600"
-                aria-hidden
-              />
-              <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Cargar venta
-              </span>
-              <p className="max-w-sm text-sm text-zinc-600 dark:text-zinc-400">
-                Escanear, carrito, pago e historial
-              </p>
-            </button>
+            {dashboard.lowStockProductsList.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => dashboard.openLowStockDetailModal()}
+                className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm transition hover:border-red-400 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <AlertTriangle
+                  className="size-14 shrink-0 text-red-600 dark:text-red-500"
+                  aria-hidden
+                />
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Alerta de stock
+                </span>
+                <p className="max-w-md px-1 text-sm leading-snug text-zinc-600 dark:text-zinc-400">
+                  Algunos productos están por terminarse. Haz clic para ver el
+                  detalle
+                </p>
+              </button>
+            ) : null}
+            </div>
           </div>
-
-          {dashboard.lowStockProductsList.length > 0 ? (
-            <div className="min-w-0 rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-900 dark:bg-amber-950">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="size-5 text-amber-800 dark:text-amber-200" />
-                  <h3 className="text-base font-semibold text-amber-950 dark:text-amber-100">
-                    Alertas de stock bajo
-                  </h3>
-                </div>
-                {dashboard.lowStockProductsList.length >
-                LOW_STOCK_PREVIEW_COUNT ? (
-                  <button
-                    type="button"
-                    onClick={dashboard.openLowStockAllModal}
-                    className="rounded-lg border border-amber-700 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900 dark:text-amber-100 dark:hover:bg-amber-900/80"
-                  >
-                    Ver todos
-                  </button>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {dashboard.lowStockPreviewList.map((product) => (
-                  <div
-                    key={product.id}
-                    className="rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950"
-                  >
-                    <p className="truncate text-sm font-semibold text-red-800 dark:text-red-200">
-                      {product.name}
-                    </p>
-                    <p className="text-xs text-red-700 dark:text-red-300">
-                      Stock: {product.currentStock}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       )}
 
@@ -267,22 +221,12 @@ const OperadorDashboardPage = (): ReactElement => {
         isSaleModalOpen={dashboard.isSaleModalOpen}
         saleModalBackdropVisible={dashboard.saleModalBackdropVisible}
         closeSaleModal={dashboard.closeSaleModal}
-        scannerInputReference={dashboard.scannerInputReference}
-        scannedBarcode={dashboard.scannedBarcode}
-        setScannedBarcode={dashboard.setScannedBarcode}
-        onScannerSubmit={dashboard.handleScannerSubmit}
         setIsBarcodeCameraScannerOpen={dashboard.setIsBarcodeCameraScannerOpen}
-        scanFeedbackMessage={dashboard.scanFeedbackMessage}
-        errorMessage={dashboard.errorMessage}
-        isSessionMissingError={dashboard.isSessionMissingError}
-        handleGoToOpenSessionFlow={dashboard.handleGoToOpenSessionFlow}
         selectedPaymentMethod={dashboard.selectedPaymentMethod}
         setSelectedPaymentMethod={dashboard.setSelectedPaymentMethod}
         handleFinalizeSale={dashboard.handleFinalizeSale}
         isSubmittingSale={dashboard.isSubmittingSale}
         saleItemsList={dashboard.saleItemsList}
-        isSaleHistoryPanelOpen={dashboard.isSaleHistoryPanelOpen}
-        setIsSaleHistoryPanelOpen={dashboard.setIsSaleHistoryPanelOpen}
         isLoadingProductsCatalog={dashboard.isLoadingProductsCatalog}
         pagedCartItems={dashboard.pagedCartItems}
         totalSaleAmount={dashboard.totalSaleAmount}
@@ -295,8 +239,19 @@ const OperadorDashboardPage = (): ReactElement => {
         recentSalesForActiveHistoryTab={
           dashboard.recentSalesForActiveHistoryTab
         }
+        recentSalesHistoryPageSlice={dashboard.recentSalesHistoryPageSlice}
+        historyTotalRowCount={dashboard.recentSalesForActiveHistoryTab.length}
         saleHistoryTab={dashboard.saleHistoryTab}
         setSaleHistoryTab={dashboard.setSaleHistoryTab}
+        historyPageIndex={dashboard.historyPageIndex}
+        historyTotalPages={dashboard.historyTotalPages}
+        setHistoryPageIndex={dashboard.setHistoryPageIndex}
+        downloadHistorySaleTicketPdf={dashboard.downloadHistorySaleTicketPdf}
+        historyTicketPdfLoadingSaleId={
+          dashboard.historyTicketPdfLoadingSaleId
+        }
+        downloadHistoryTabReportPdf={dashboard.downloadHistoryTabReportPdf}
+        historyReportPdfLoading={dashboard.historyReportPdfLoading}
         isQuickLoadModalOpen={dashboard.isQuickLoadModalOpen}
         quickLoadModalBackdropVisible={dashboard.quickLoadModalBackdropVisible}
         closeQuickLoadModal={dashboard.closeQuickLoadModal}
@@ -314,7 +269,9 @@ const OperadorDashboardPage = (): ReactElement => {
         saleNotesInput={dashboard.saleNotesInput}
         setSaleNotesInput={dashboard.setSaleNotesInput}
         isStockToolsModalOpen={dashboard.isStockToolsModalOpen}
-        setIsStockToolsModalOpen={dashboard.setIsStockToolsModalOpen}
+        stockToolsModalBackdropVisible={dashboard.stockToolsModalBackdropVisible}
+        closeStockToolsModal={dashboard.closeStockToolsModal}
+        closeStockToolsModalImmediately={dashboard.closeStockToolsModalImmediately}
         openCreateProductModal={dashboard.openCreateProductModal}
         productsCatalog={dashboard.productsCatalog}
         openStockAdjustmentModal={dashboard.openStockAdjustmentModal}
@@ -337,6 +294,9 @@ const OperadorDashboardPage = (): ReactElement => {
         isSubmittingCloseCash={dashboard.isSubmittingCloseCash}
         handleSubmitCloseCash={dashboard.handleSubmitCloseCash}
         stockAdjustmentProduct={dashboard.stockAdjustmentProduct}
+        stockAdjustmentModalBackdropVisible={
+          dashboard.stockAdjustmentModalBackdropVisible
+        }
         closeStockAdjustmentModal={dashboard.closeStockAdjustmentModal}
         stockAdjustmentNewStockInput={dashboard.stockAdjustmentNewStockInput}
         setStockAdjustmentNewStockInput={
@@ -351,14 +311,26 @@ const OperadorDashboardPage = (): ReactElement => {
         canSubmitStockAdjustment={dashboard.canSubmitStockAdjustment}
         isSavingStockAdjustment={dashboard.isSavingStockAdjustment}
         handleStockAdjustmentSubmit={dashboard.handleStockAdjustmentSubmit}
-        isLowStockAllModalOpen={dashboard.isLowStockAllModalOpen}
-        setIsLowStockAllModalOpen={dashboard.setIsLowStockAllModalOpen}
-        lowStockModalSlice={dashboard.lowStockModalSlice}
-        lowStockModalPageIndex={dashboard.lowStockModalPageIndex}
-        setLowStockModalPageIndex={dashboard.setLowStockModalPageIndex}
-        lowStockModalTotalPages={dashboard.lowStockModalTotalPages}
+        isLowStockDetailModalOpen={dashboard.isLowStockDetailModalOpen}
+        lowStockDetailModalBackdropVisible={
+          dashboard.lowStockDetailModalBackdropVisible
+        }
+        closeLowStockDetailModal={dashboard.closeLowStockDetailModal}
+        lowStockProductsList={dashboard.lowStockProductsList}
         isBarcodeCameraScannerOpen={dashboard.isBarcodeCameraScannerOpen}
         tryAddProductBySku={dashboard.tryAddProductBySku}
+        isRecreoModalOpen={dashboard.isRecreoModalOpen}
+        recreoModalBackdropVisible={dashboard.recreoModalBackdropVisible}
+        closeRecreoModal={dashboard.closeRecreoModal}
+        recreoBreakDisplay={dashboard.recreoBreakDisplay}
+        breakDurationMinutes={dashboard.breakDurationMinutes}
+        setBreakDurationMinutes={dashboard.setBreakDurationMinutes}
+        isStartingRecreoSession={dashboard.isStartingRecreoSession}
+        recreoStartErrorMessage={dashboard.recreoStartErrorMessage}
+        remainingTimeSeconds={dashboard.remainingTimeSeconds}
+        isBreakActive={dashboard.isBreakActive}
+        handleStartBreak={dashboard.handleStartBreak}
+        handleCancelBreak={dashboard.handleCancelBreak}
       />
     </main>
   );

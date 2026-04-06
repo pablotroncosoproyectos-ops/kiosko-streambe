@@ -12,8 +12,9 @@ import type {
   SelectedPaymentMethod,
 } from "../types";
 import { CloseCashModal } from "./CloseCashModal";
-import { LowStockAllModal } from "./LowStockAllModal";
+import { LowStockDetailModal } from "./LowStockDetailModal";
 import { QuickLoadModal } from "./QuickLoadModal";
+import { RecreoModal } from "./RecreoModal";
 import { SaleModal } from "./SaleModal";
 import { StockAdjustmentModal } from "./StockAdjustmentModal";
 import { StockToolsModal } from "./StockToolsModal";
@@ -22,22 +23,12 @@ export interface ModalsContainerProps {
   isSaleModalOpen: boolean;
   saleModalBackdropVisible: boolean;
   closeSaleModal: () => void;
-  scannerInputReference: React.RefObject<HTMLInputElement | null>;
-  scannedBarcode: string;
-  setScannedBarcode: Dispatch<SetStateAction<string>>;
-  onScannerSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   setIsBarcodeCameraScannerOpen: Dispatch<SetStateAction<boolean>>;
-  scanFeedbackMessage: string;
-  errorMessage: string;
-  isSessionMissingError: boolean;
-  handleGoToOpenSessionFlow: () => void;
   selectedPaymentMethod: SelectedPaymentMethod;
   setSelectedPaymentMethod: Dispatch<SetStateAction<SelectedPaymentMethod>>;
   handleFinalizeSale: () => Promise<void>;
   isSubmittingSale: boolean;
   saleItemsList: CartItem[];
-  isSaleHistoryPanelOpen: boolean;
-  setIsSaleHistoryPanelOpen: Dispatch<SetStateAction<boolean>>;
   isLoadingProductsCatalog: boolean;
   pagedCartItems: CartItem[];
   totalSaleAmount: number;
@@ -48,8 +39,17 @@ export interface ModalsContainerProps {
   cartTotalPages: number;
   setCartPageIndex: Dispatch<SetStateAction<number>>;
   recentSalesForActiveHistoryTab: RecentSaleHistoryRecord[];
+  recentSalesHistoryPageSlice: RecentSaleHistoryRecord[];
+  historyTotalRowCount: number;
   saleHistoryTab: SaleHistoryTab;
   setSaleHistoryTab: Dispatch<SetStateAction<SaleHistoryTab>>;
+  historyPageIndex: number;
+  historyTotalPages: number;
+  setHistoryPageIndex: Dispatch<SetStateAction<number>>;
+  downloadHistorySaleTicketPdf: (record: RecentSaleHistoryRecord) => void;
+  historyTicketPdfLoadingSaleId: string | null;
+  downloadHistoryTabReportPdf: () => void;
+  historyReportPdfLoading: boolean;
 
   isQuickLoadModalOpen: boolean;
   quickLoadModalBackdropVisible: boolean;
@@ -71,7 +71,9 @@ export interface ModalsContainerProps {
   setSaleNotesInput: Dispatch<SetStateAction<string>>;
 
   isStockToolsModalOpen: boolean;
-  setIsStockToolsModalOpen: Dispatch<SetStateAction<boolean>>;
+  stockToolsModalBackdropVisible: boolean;
+  closeStockToolsModal: () => void;
+  closeStockToolsModalImmediately: () => void;
   openCreateProductModal: () => void;
   productsCatalog: Product[];
   openStockAdjustmentModal: (product: Product) => void;
@@ -104,6 +106,7 @@ export interface ModalsContainerProps {
   handleSubmitCloseCash: () => Promise<void>;
 
   stockAdjustmentProduct: Product | null;
+  stockAdjustmentModalBackdropVisible: boolean;
   closeStockAdjustmentModal: () => void;
   stockAdjustmentNewStockInput: string;
   setStockAdjustmentNewStockInput: Dispatch<SetStateAction<string>>;
@@ -115,15 +118,31 @@ export interface ModalsContainerProps {
   isSavingStockAdjustment: boolean;
   handleStockAdjustmentSubmit: () => Promise<void>;
 
-  isLowStockAllModalOpen: boolean;
-  setIsLowStockAllModalOpen: Dispatch<SetStateAction<boolean>>;
-  lowStockModalSlice: Product[];
-  lowStockModalPageIndex: number;
-  setLowStockModalPageIndex: Dispatch<SetStateAction<number>>;
-  lowStockModalTotalPages: number;
+  isLowStockDetailModalOpen: boolean;
+  lowStockDetailModalBackdropVisible: boolean;
+  closeLowStockDetailModal: () => void;
+  lowStockProductsList: Product[];
 
   isBarcodeCameraScannerOpen: boolean;
   tryAddProductBySku: (rawSku: string) => void;
+
+  isRecreoModalOpen: boolean;
+  recreoModalBackdropVisible: boolean;
+  closeRecreoModal: () => void;
+  recreoBreakDisplay: {
+    recreoSessionsStartedTodayCount: number;
+    displayBreakIndex: number;
+    maxBreaksPerDay: number;
+  } | null;
+  breakDurationMinutes: number;
+  setBreakDurationMinutes: Dispatch<SetStateAction<number>>;
+  isStartingRecreoSession: boolean;
+  recreoStartErrorMessage: string;
+  remainingTimeSeconds: number;
+  /** Recreo activo; también habilita el escáner en Carga rápida. */
+  isBreakActive: boolean;
+  handleStartBreak: () => void | Promise<void>;
+  handleCancelBreak: () => void;
 }
 
 export function ModalsContainer(props: ModalsContainerProps): ReactElement {
@@ -131,22 +150,12 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     isSaleModalOpen,
     saleModalBackdropVisible,
     closeSaleModal,
-    scannerInputReference,
-    scannedBarcode,
-    setScannedBarcode,
-    onScannerSubmit,
     setIsBarcodeCameraScannerOpen,
-    scanFeedbackMessage,
-    errorMessage,
-    isSessionMissingError,
-    handleGoToOpenSessionFlow,
     selectedPaymentMethod,
     setSelectedPaymentMethod,
     handleFinalizeSale,
     isSubmittingSale,
     saleItemsList,
-    isSaleHistoryPanelOpen,
-    setIsSaleHistoryPanelOpen,
     isLoadingProductsCatalog,
     pagedCartItems,
     totalSaleAmount,
@@ -157,8 +166,17 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     cartTotalPages,
     setCartPageIndex,
     recentSalesForActiveHistoryTab,
+    recentSalesHistoryPageSlice,
+    historyTotalRowCount,
     saleHistoryTab,
     setSaleHistoryTab,
+    historyPageIndex,
+    historyTotalPages,
+    setHistoryPageIndex,
+    downloadHistorySaleTicketPdf,
+    historyTicketPdfLoadingSaleId,
+    downloadHistoryTabReportPdf,
+    historyReportPdfLoading,
     isQuickLoadModalOpen,
     quickLoadModalBackdropVisible,
     closeQuickLoadModal,
@@ -174,7 +192,9 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     saleNotesInput,
     setSaleNotesInput,
     isStockToolsModalOpen,
-    setIsStockToolsModalOpen,
+    stockToolsModalBackdropVisible,
+    closeStockToolsModal,
+    closeStockToolsModalImmediately,
     openCreateProductModal,
     productsCatalog,
     openStockAdjustmentModal,
@@ -197,6 +217,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     isSubmittingCloseCash,
     handleSubmitCloseCash,
     stockAdjustmentProduct,
+    stockAdjustmentModalBackdropVisible,
     closeStockAdjustmentModal,
     stockAdjustmentNewStockInput,
     setStockAdjustmentNewStockInput,
@@ -207,14 +228,24 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     canSubmitStockAdjustment,
     isSavingStockAdjustment,
     handleStockAdjustmentSubmit,
-    isLowStockAllModalOpen,
-    setIsLowStockAllModalOpen,
-    lowStockModalSlice,
-    lowStockModalPageIndex,
-    setLowStockModalPageIndex,
-    lowStockModalTotalPages,
+    isLowStockDetailModalOpen,
+    lowStockDetailModalBackdropVisible,
+    closeLowStockDetailModal,
+    lowStockProductsList,
     isBarcodeCameraScannerOpen,
     tryAddProductBySku,
+    isRecreoModalOpen,
+    recreoModalBackdropVisible,
+    closeRecreoModal,
+    recreoBreakDisplay,
+    breakDurationMinutes,
+    setBreakDurationMinutes,
+    isStartingRecreoSession,
+    recreoStartErrorMessage,
+    remainingTimeSeconds,
+    isBreakActive,
+    handleStartBreak,
+    handleCancelBreak,
   } = props;
 
   return (
@@ -223,39 +254,40 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
         <SaleModal
           saleModalBackdropVisible={saleModalBackdropVisible}
           onClose={closeSaleModal}
-          scannerInputReference={scannerInputReference}
-          scannedBarcode={scannedBarcode}
-          setScannedBarcode={setScannedBarcode}
-          onScannerSubmit={onScannerSubmit}
-          onOpenBarcodeCameraScanner={() => setIsBarcodeCameraScannerOpen(true)}
-          scanFeedbackMessage={scanFeedbackMessage}
-          errorMessage={errorMessage}
-          isSessionMissingError={isSessionMissingError}
-          onGoToOpenSessionFlow={handleGoToOpenSessionFlow}
-          selectedPaymentMethod={selectedPaymentMethod}
-          setSelectedPaymentMethod={setSelectedPaymentMethod}
-          onFinalizeSale={handleFinalizeSale}
-          isSubmittingSale={isSubmittingSale}
-          saleItemsList={saleItemsList}
-          isSaleHistoryPanelOpen={isSaleHistoryPanelOpen}
-          setIsSaleHistoryPanelOpen={setIsSaleHistoryPanelOpen}
-          isLoadingProductsCatalog={isLoadingProductsCatalog}
-          pagedCartItems={pagedCartItems}
-          totalSaleAmount={totalSaleAmount}
-          onUpdateSaleItemQuantity={updateSaleItemQuantity}
-          onToggleSaleItemUseCostPrice={toggleSaleItemUseCostPrice}
-          onRemoveSaleItem={removeSaleItem}
-          cartPageIndex={cartPageIndex}
-          cartTotalPages={cartTotalPages}
-          setCartPageIndex={setCartPageIndex}
           recentSalesForActiveHistoryTab={recentSalesForActiveHistoryTab}
+          recentSalesHistoryPageSlice={recentSalesHistoryPageSlice}
+          historyTotalRowCount={historyTotalRowCount}
           saleHistoryTab={saleHistoryTab}
           setSaleHistoryTab={setSaleHistoryTab}
+          historyPageIndex={historyPageIndex}
+          historyTotalPages={historyTotalPages}
+          setHistoryPageIndex={setHistoryPageIndex}
+          onDownloadHistorySaleTicketPdf={downloadHistorySaleTicketPdf}
+          historyTicketPdfLoadingSaleId={historyTicketPdfLoadingSaleId}
+          onDownloadHistoryTabReportPdf={downloadHistoryTabReportPdf}
+          historyReportPdfLoading={historyReportPdfLoading}
+        />
+      ) : null}
+
+      {isRecreoModalOpen ? (
+        <RecreoModal
+          recreoModalBackdropVisible={recreoModalBackdropVisible}
+          onClose={closeRecreoModal}
+          recreoBreakDisplay={recreoBreakDisplay}
+          breakDurationMinutes={breakDurationMinutes}
+          setBreakDurationMinutes={setBreakDurationMinutes}
+          isStartingRecreoSession={isStartingRecreoSession}
+          recreoStartErrorMessage={recreoStartErrorMessage}
+          remainingTimeSeconds={remainingTimeSeconds}
+          isBreakActive={isBreakActive}
+          onStartBreak={handleStartBreak}
+          onCancelBreak={handleCancelBreak}
         />
       ) : null}
 
       {isQuickLoadModalOpen ? (
         <QuickLoadModal
+          isBreakActive={isBreakActive}
           quickLoadModalBackdropVisible={quickLoadModalBackdropVisible}
           onClose={closeQuickLoadModal}
           catalogBrowseMode={catalogBrowseMode}
@@ -266,6 +298,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
           quickLoadSearchQuery={quickLoadSearchQuery}
           setQuickLoadSearchQuery={setQuickLoadSearchQuery}
           quickLoadDisplayedProducts={quickLoadDisplayedProducts}
+          productsForBarcodeLookup={productsCatalog}
           isLoadingProductsCatalog={isLoadingProductsCatalog}
           onAddProductFromQuickLoad={addProductFromQuickLoadWithLineSubtotal}
           totalSaleAmount={totalSaleAmount}
@@ -288,12 +321,13 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
 
       <StockToolsModal
         isOpen={isStockToolsModalOpen}
-        onClose={() => setIsStockToolsModalOpen(false)}
+        stockToolsModalBackdropVisible={stockToolsModalBackdropVisible}
+        onClose={closeStockToolsModal}
         onOpenCreateProduct={openCreateProductModal}
         productsCatalog={productsCatalog}
         onSelectProductForAdjustment={(product) => {
+          closeStockToolsModalImmediately();
           openStockAdjustmentModal(product);
-          setIsStockToolsModalOpen(false);
         }}
       />
 
@@ -305,7 +339,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
         editingProductId={null}
         productList={productsCatalog}
         onSuccess={async () => {
-          setIsStockToolsModalOpen(false);
+          closeStockToolsModalImmediately();
           await loadProductsCatalog();
         }}
         overlayZClass="z-56"
@@ -331,6 +365,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
 
       <StockAdjustmentModal
         product={stockAdjustmentProduct}
+        stockAdjustmentModalBackdropVisible={stockAdjustmentModalBackdropVisible}
         onClose={closeStockAdjustmentModal}
         stockAdjustmentNewStockInput={stockAdjustmentNewStockInput}
         setStockAdjustmentNewStockInput={setStockAdjustmentNewStockInput}
@@ -343,20 +378,18 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
         onSubmit={handleStockAdjustmentSubmit}
       />
 
-      <LowStockAllModal
-        isOpen={isLowStockAllModalOpen}
-        onClose={() => setIsLowStockAllModalOpen(false)}
-        lowStockModalSlice={lowStockModalSlice}
-        lowStockModalPageIndex={lowStockModalPageIndex}
-        setLowStockModalPageIndex={setLowStockModalPageIndex}
-        lowStockModalTotalPages={lowStockModalTotalPages}
-      />
+      {isLowStockDetailModalOpen ? (
+        <LowStockDetailModal
+          lowStockDetailModalBackdropVisible={lowStockDetailModalBackdropVisible}
+          onClose={closeLowStockDetailModal}
+          lowStockProductsList={lowStockProductsList}
+        />
+      ) : null}
 
       <BarcodeCameraScanner
         isOpen={isBarcodeCameraScannerOpen}
         onClose={() => setIsBarcodeCameraScannerOpen(false)}
         onDecoded={(decodedText) => {
-          setScannedBarcode(decodedText);
           tryAddProductBySku(decodedText);
         }}
       />

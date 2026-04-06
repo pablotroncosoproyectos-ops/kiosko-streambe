@@ -10,6 +10,8 @@ interface AuthenticatedUserProfile {
   role: UserRole;
   isActive: boolean;
   createdAt: string;
+  /** ADMIN: siempre true en cliente; OPERADOR: columna `can_view_sales_history`. */
+  canViewSalesHistory: boolean;
 }
 
 function getSupabasePublicConfiguration(): {
@@ -114,7 +116,7 @@ export async function getAuthenticatedUserProfile(): Promise<AuthenticatedUserPr
   const { data: authenticatedUserProfileRow, error: authenticatedUserProfileError } =
     await supabaseServerClient
       .from("users")
-      .select("id, email, full_name, role, is_active, created_at")
+      .select("*")
       .eq("id", authenticationData.user.id)
       .single();
 
@@ -127,6 +129,13 @@ export async function getAuthenticatedUserProfile(): Promise<AuthenticatedUserPr
     throw new Error("Authentication required");
   }
 
+  const rowWithHistoryFlag = authenticatedUserProfileRow as typeof authenticatedUserProfileRow & {
+    can_view_sales_history?: boolean | null;
+  };
+  const operatorCanViewHistory = Boolean(
+    rowWithHistoryFlag.can_view_sales_history,
+  );
+
   return {
     id: authenticatedUserProfileRow.id,
     email: authenticatedUserProfileRow.email,
@@ -134,5 +143,7 @@ export async function getAuthenticatedUserProfile(): Promise<AuthenticatedUserPr
     role,
     isActive: authenticatedUserProfileRow.is_active,
     createdAt: authenticatedUserProfileRow.created_at,
+    canViewSalesHistory:
+      role === "ADMIN" ? true : operatorCanViewHistory,
   };
 }
