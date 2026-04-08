@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readMustChangePasswordFromUserMetadata } from "@/lib/authUserMetadata";
 import { createSupabaseServerClientUsingCookies } from "@/lib/supabase-server-route";
 import { loginWithEmailAndPassword } from "@/services/authService";
 
@@ -47,10 +48,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       loginCredentials,
     );
 
+    const { data: sessionUserData } = await supabaseServerClient.auth.getUser();
+    const mustChangePassword = readMustChangePasswordFromUserMetadata(
+      sessionUserData.user,
+    );
+
     return NextResponse.json(
       {
         message: "Login successful",
         userProfile: authenticatedUserSessionPayload.userProfile,
+        mustChangePassword,
       },
       { status: 200 },
     );

@@ -6,12 +6,13 @@ import {
   CalendarDays,
   ClipboardList,
   CreditCard,
-  MailPlus,
   Landmark,
   Package,
   Printer,
   QrCode,
+  Search,
   TrendingUp,
+  Users,
   Wallet,
   WalletCards,
   X,
@@ -21,6 +22,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -28,6 +30,7 @@ import {
 } from "recharts";
 
 import { formatArgentinaPesos } from "@/lib/currencyFormat";
+import { UserManagementModal } from "@/components/admin/UserManagementModal";
 import { InventoryMovementTypeBadge } from "@/components/inventory/InventoryMovementTypeBadge";
 import { DailyClosurePrintReceipt } from "./DailyClosurePrintReceipt";
 import { getCurrentBuenosAiresCalendarDateYyyyMmDd } from "@/lib/buenosAiresReportingCalendar";
@@ -57,13 +60,16 @@ interface InventoryMovementsApiResponse {
   message?: string;
 }
 
-interface InviteUserApiResponse {
+interface AuthMeApiResponse {
+  userProfile?: {
+    id: string;
+    role: string;
+  };
   message?: string;
 }
 
 type TrackedPaymentMethodKind = "CASH" | "QR" | "TRANSFER" | "DEBIT";
 type TipoArqueo = "TOTAL" | "RECREO" | "LIBRE";
-type InviteRole = "ADMIN" | "OPERADOR";
 
 interface DominantPaymentMethodSummary {
   displayLabel: string;
@@ -71,11 +77,15 @@ interface DominantPaymentMethodSummary {
   transactionCount: number;
 }
 
-const REVENUE_BAR_CHART_COLORS = ["#0f172a", "#64748b"];
+const REVENUE_BAR_CHART_COLORS = ["#10b981", "#059669"];
 
 const STANDARD_CARD_CLASS_NAME = "rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm";
-const LAUNCHER_CARD_CLASS_NAME =
-  "group flex min-h-[160px] flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-zinc-400 hover:shadow-md";
+
+const REPORTS_LAUNCHER_CARD_BASE_CLASS =
+  "flex min-h-[240px] w-full flex-col items-center justify-center gap-4 rounded-3xl border border-zinc-200 bg-white p-7 text-center shadow-sm transition-all duration-300 ease-out dark:border-zinc-800 dark:bg-zinc-900";
+
+const REPORTS_LAUNCHER_CARD_HOVER_CLASS =
+  "hover:-translate-y-3 hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_20px_40px_rgba(0,0,0,0.3)] active:scale-95";
 
 function formatIntegerForDisplay(value: number): string {
   return new Intl.NumberFormat("es-AR").format(Math.round(value));
@@ -214,22 +224,22 @@ const ReportsDashboardPage = (): ReactElement => {
   >([]);
   const [filtroArqueo, setFiltroArqueo] = useState<TipoArqueo>("TOTAL");
   const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [isClient, setIsClient] = useState<boolean>(false);
   const [isGeneralModalOpen, setIsGeneralModalOpen] = useState<boolean>(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [canRenderChart, setCanRenderChart] = useState<boolean>(false);
   const [isProductsModalOpen, setIsProductsModalOpen] = useState<boolean>(false);
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState<boolean>(false);
-  const [isInviteUserModalOpen, setIsInviteUserModalOpen] =
+  const [isUsersManagementPanelOpen, setIsUsersManagementPanelOpen] =
     useState<boolean>(false);
-  const [inviteEmailInput, setInviteEmailInput] = useState<string>("");
-  const [inviteRoleInput, setInviteRoleInput] = useState<InviteRole>("OPERADOR");
-  const [isSendingInvitation, setIsSendingInvitation] =
-    useState<boolean>(false);
-  const [inviteUserErrorMessage, setInviteUserErrorMessage] =
+  const [authenticatedUserIdentifier, setAuthenticatedUserIdentifier] =
     useState<string>("");
-  const [inviteUserSuccessMessage, setInviteUserSuccessMessage] =
-    useState<string>("");
+  const [authenticatedUserRole, setAuthenticatedUserRole] = useState<
+    string | null
+  >(null);
+  const [isAuthProfileLoading, setIsAuthProfileLoading] =
+    useState<boolean>(true);
   const [isLoadingViewSummaryData, setIsLoadingViewSummaryData] =
     useState<boolean>(true);
   const [isLoadingDailyClosureReport, setIsLoadingDailyClosureReport] =
@@ -401,8 +411,44 @@ const ReportsDashboardPage = (): ReactElement => {
     void loadInventoryMovementsFromServer();
   }, [loadInventoryMovementsFromServer]);
 
+  const loadAuthenticatedProfileFromServer =
+    useCallback(async (): Promise<void> => {
+      setIsAuthProfileLoading(true);
+      try {
+        const response = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include",
+        });
+        const responseBody = (await response.json()) as AuthMeApiResponse;
+        if (response.status === 401) {
+          window.location.assign("/login");
+          return;
+        }
+        if (!response.ok || !responseBody.userProfile) {
+          setAuthenticatedUserRole(null);
+          setAuthenticatedUserIdentifier("");
+          return;
+        }
+        setAuthenticatedUserIdentifier(responseBody.userProfile.id);
+        setAuthenticatedUserRole(responseBody.userProfile.role);
+      } catch {
+        setAuthenticatedUserRole(null);
+        setAuthenticatedUserIdentifier("");
+      } finally {
+        setIsAuthProfileLoading(false);
+      }
+    }, []);
+
+  useEffect(() => {
+    void loadAuthenticatedProfileFromServer();
+  }, [loadAuthenticatedProfileFromServer]);
+
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setIsClient(true);
   }, []);
 
   useEffect(() => {
@@ -439,59 +485,6 @@ const ReportsDashboardPage = (): ReactElement => {
     setSelectedReportCalendarDate(getCurrentBuenosAiresCalendarDateYyyyMmDd());
   }
 
-  function openInviteUserModal(): void {
-    setInviteEmailInput("");
-    setInviteRoleInput("OPERADOR");
-    setInviteUserErrorMessage("");
-    setInviteUserSuccessMessage("");
-    setIsInviteUserModalOpen(true);
-  }
-
-  async function handleInviteUserSubmit(): Promise<void> {
-    const normalizedEmail = inviteEmailInput.trim().toLowerCase();
-    if (normalizedEmail.length === 0) {
-      setInviteUserErrorMessage("El email es obligatorio.");
-      return;
-    }
-
-    setIsSendingInvitation(true);
-    setInviteUserErrorMessage("");
-    setInviteUserSuccessMessage("");
-    try {
-      const payload = {
-        email: normalizedEmail,
-        role: inviteRoleInput,
-      };
-      const response = await fetch("/api/users/invite", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const responseBody = (await response.json()) as InviteUserApiResponse;
-
-      if (response.status === 401) {
-        window.location.assign("/login");
-        return;
-      }
-
-      if (!response.ok) {
-        setInviteUserErrorMessage(
-          responseBody.message || "No se pudo enviar la invitación.",
-        );
-        return;
-      }
-
-      setInviteUserSuccessMessage(
-        responseBody.message || "Invitación enviada correctamente.",
-      );
-    } catch {
-      setInviteUserErrorMessage("Error inesperado al enviar la invitación.");
-    } finally {
-      setIsSendingInvitation(false);
-    }
-  }
-
   const revenueChartData =
     dailyClosureReportMetrics === null
       ? []
@@ -505,10 +498,6 @@ const ReportsDashboardPage = (): ReactElement => {
             revenue: dailyClosureReportMetrics.freeSaleSessionRevenueTotal,
           },
         ];
-
-  const isSelectedDateToday =
-    selectedReportCalendarDate ===
-    getCurrentBuenosAiresCalendarDateYyyyMmDd();
 
   const filteredRevenueAmount =
     dailyClosureReportMetrics === null
@@ -528,6 +517,13 @@ const ReportsDashboardPage = (): ReactElement => {
           ? dailyClosureReportMetrics.grossProfitFreeSaleTotal
           : dailyClosureReportMetrics.grossProfitTotal;
 
+  const averageTicketAmount =
+    dailyClosureReportMetrics === null ||
+    dailyClosureReportMetrics.totalTransactionCount <= 0
+      ? null
+      : dailyClosureReportMetrics.totalRevenue /
+        dailyClosureReportMetrics.totalTransactionCount;
+
   const filtroLabel =
     filtroArqueo === "RECREO"
       ? "Recreo"
@@ -536,61 +532,89 @@ const ReportsDashboardPage = (): ReactElement => {
         : "Arqueo Total";
 
   function renderSessionChart(): ReactElement {
+    const chartRevenueTotal = revenueChartData.reduce(
+      (accumulator, row) => accumulator + row.revenue,
+      0,
+    );
+
     return (
-      <div className="relative h-[400px] min-h-[400px] w-full min-w-0 overflow-hidden">
+      <div className="relative w-full min-w-0 overflow-hidden">
         {isLoadingDailyClosureReport ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-[350px] w-full items-center justify-center text-sm text-slate-500">
             Cargando gráfico…
           </div>
         ) : revenueChartData.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-[350px] w-full items-center justify-center text-sm text-slate-500">
             No hay datos para mostrar.
           </div>
         ) : canRenderChart && isMounted ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={revenueChartData}
-              margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" />
-              <XAxis
-                dataKey="categoryDisplayLabel"
-                tick={{ fill: "#52525b", fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: "#71717a", fontSize: 12 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(value: number) => formatIntegerForDisplay(value)}
-              />
-              <Tooltip
-                formatter={(value) => {
-                  const rawValue = Array.isArray(value) ? value[0] : value;
-                  const numericRevenue =
-                    typeof rawValue === "number" ? rawValue : Number(rawValue ?? 0);
-                  return formatArgentinaPesos(
-                    Number.isFinite(numericRevenue) ? numericRevenue : 0,
-                  );
-                }}
-              />
-              <Bar dataKey="revenue" name="Ingresos" radius={[8, 8, 0, 0]}>
-                {revenueChartData.map((chartRow, chartRowIndex) => (
-                  <Cell
-                    key={chartRow.categoryDisplayLabel}
-                    fill={
-                      REVENUE_BAR_CHART_COLORS[
-                        chartRowIndex % REVENUE_BAR_CHART_COLORS.length
-                      ]
-                    }
+          <div className="h-[350px] w-full min-h-[350px]">
+            {isClient ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={revenueChartData}
+                  margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" />
+                  <XAxis
+                    dataKey="categoryDisplayLabel"
+                    tick={{ fill: "#52525b", fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                  <YAxis
+                    tick={{ fill: "#71717a", fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value: number) => formatIntegerForDisplay(value)}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(16, 185, 129, 0.08)" }}
+                    contentStyle={{
+                      borderRadius: 14,
+                      border: "1px solid rgba(16, 185, 129, 0.25)",
+                      background: "rgba(255,255,255,0.96)",
+                      boxShadow: "0 10px 28px rgba(0,0,0,0.10)",
+                    }}
+                    labelStyle={{ color: "#065f46", fontWeight: 700 }}
+                    formatter={(value) => {
+                      const rawValue = Array.isArray(value) ? value[0] : value;
+                      const numericRevenue =
+                        typeof rawValue === "number" ? rawValue : Number(rawValue ?? 0);
+                      const safeRevenue = Number.isFinite(numericRevenue)
+                        ? numericRevenue
+                        : 0;
+                      const percentage =
+                        chartRevenueTotal > 0
+                          ? (safeRevenue / chartRevenueTotal) * 100
+                          : 0;
+                      return `${formatArgentinaPesos(safeRevenue)} (${percentage.toFixed(1)}%)`;
+                    }}
+                  />
+                  <Bar dataKey="revenue" name="Ingresos" radius={[8, 8, 0, 0]}>
+                    {revenueChartData.map((chartRow, chartRowIndex) => (
+                      <Cell
+                        key={chartRow.categoryDisplayLabel}
+                        fill={
+                          REVENUE_BAR_CHART_COLORS[
+                            chartRowIndex % REVENUE_BAR_CHART_COLORS.length
+                          ]
+                        }
+                      />
+                    ))}
+                    <LabelList
+                      dataKey="revenue"
+                      position="top"
+                      formatter={(value) => formatArgentinaPesos(Number(value ?? 0))}
+                      className="fill-emerald-700 text-[11px] font-semibold dark:fill-emerald-300"
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : null}
+          </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
+          <div className="flex h-[350px] w-full flex-col items-center justify-center gap-3">
             <span className="size-8 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
             <span className="text-sm text-slate-500">Inicializando gráfico…</span>
           </div>
@@ -604,16 +628,24 @@ const ReportsDashboardPage = (): ReactElement => {
     onClose: () => void,
     content: ReactElement,
     widthClassName = "max-w-6xl",
+    titleIcon?: ReactElement,
   ): ReactElement {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-3 backdrop-blur-md dark:bg-zinc-950/55 md:p-6">
         <div
-          className={`flex max-h-[92vh] w-full ${widthClassName} flex-col overflow-hidden rounded-2xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10`}
+          className={`flex max-h-[92vh] w-full ${widthClassName} flex-col overflow-hidden rounded-3xl border border-white/25 bg-white/85 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 dark:ring-white/10`}
         >
-          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              {title}
-            </h2>
+          <div className="flex items-center justify-between border-b border-zinc-200 px-8 py-6 dark:border-zinc-700">
+            <div className="flex min-w-0 items-center gap-3">
+              {titleIcon ? (
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-emerald-100/50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  {titleIcon}
+                </span>
+              ) : null}
+              <h2 className="truncate text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                {title}
+              </h2>
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -622,7 +654,11 @@ const ReportsDashboardPage = (): ReactElement => {
               <X className="size-5" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto p-5">{content}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-8">
+            <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {content}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -630,27 +666,41 @@ const ReportsDashboardPage = (): ReactElement => {
 
   return (
     <>
-      <main className="mx-auto h-screen w-full max-w-7xl overflow-hidden space-y-4 px-4 py-4 text-slate-900 print:hidden">
-        <div className="mx-auto flex h-full max-w-7xl min-h-0 flex-col gap-4">
-          <header className="flex flex-col gap-3">
-            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+      <main className="flex min-h-0 w-full flex-1 flex-col [-ms-overflow-style:none] [scrollbar-width:none] print:hidden [&::-webkit-scrollbar]:hidden">
+        <div className="mx-auto flex w-full max-w-7xl min-h-0 flex-1 flex-col gap-6 px-4 py-4 text-zinc-900 md:px-6 md:py-6 dark:text-zinc-100">
+          <header className="flex shrink-0 flex-col gap-4">
+            <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-start md:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold tracking-tight text-zinc-900 md:text-2xl dark:text-zinc-100">
                   Panel de Informes
                 </h1>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                   Resumen operativo y métricas de ventas
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openInviteUserModal}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  <MailPlus className="size-4" aria-hidden />
-                  Invitación de Usuario
-                </button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex flex-wrap items-center gap-2">
+                  {(
+                    [
+                      { value: "LIBRE", label: "Venta Libre" },
+                      { value: "RECREO", label: "Recreo" },
+                      { value: "TOTAL", label: "Arqueo Total" },
+                    ] as const
+                  ).map((filterButton) => (
+                    <button
+                      key={filterButton.value}
+                      type="button"
+                      onClick={() => setFiltroArqueo(filterButton.value)}
+                      className={
+                        filtroArqueo === filterButton.value
+                          ? "rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
+                          : "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                      }
+                    >
+                      {filterButton.label}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={handlePrintDailyClosureReport}
@@ -670,9 +720,9 @@ const ReportsDashboardPage = (): ReactElement => {
               <div className="flex flex-col gap-2">
                 <label
                   htmlFor="report-calendar-date-input"
-                  className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
                 >
-                  <CalendarDays className="size-4 text-slate-500" aria-hidden />
+                  <CalendarDays className="size-4 text-zinc-500 dark:text-zinc-400" aria-hidden />
                   Fecha del informe
                 </label>
                 <div className="flex flex-wrap items-center gap-2">
@@ -683,57 +733,23 @@ const ReportsDashboardPage = (): ReactElement => {
                     onChange={(event) =>
                       handleReportCalendarDateInputChange(event.target.value)
                     }
-                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                   <button
                     type="button"
                     onClick={handleResetReportCalendarDateToToday}
-                    className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                    className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                   >
                     Hoy
                   </button>
                 </div>
-                {isSelectedDateToday ? (
-                  <p className="max-w-xl text-xs leading-relaxed text-slate-500">
-                    Filtro de hoy activo: el arqueo impreso corresponde a este
-                    día calendario (Buenos Aires).
-                  </p>
-                ) : (
-                  <p className="max-w-xl text-xs leading-relaxed text-slate-500">
-                    Fecha histórica: las métricas agrupan ventas solo para el día
-                    seleccionado.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                {(
-                  [
-                    { value: "LIBRE", label: "Venta Libre" },
-                    { value: "RECREO", label: "Recreo" },
-                    { value: "TOTAL", label: "Arqueo Total" },
-                  ] as const
-                ).map((filterButton) => (
-                  <button
-                    key={filterButton.value}
-                    type="button"
-                    onClick={() => setFiltroArqueo(filterButton.value)}
-                    className={
-                      filtroArqueo === filterButton.value
-                        ? "rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
-                        : "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    }
-                  >
-                    {filterButton.label}
-                  </button>
-                ))}
               </div>
             </div>
           </header>
 
           {pageErrorMessage.length > 0 ? (
             <p
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm"
+              className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
               role="alert"
             >
               {pageErrorMessage}
@@ -742,27 +758,31 @@ const ReportsDashboardPage = (): ReactElement => {
 
           {dailyClosureErrorMessage.length > 0 ? (
             <p
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm"
+              className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
               role="alert"
             >
               {dailyClosureErrorMessage}
             </p>
           ) : null}
 
-          <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="pt-8">
+            <section className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
             <button
               type="button"
               onClick={() => setIsGeneralModalOpen(true)}
-              className={LAUNCHER_CARD_CLASS_NAME}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-emerald-400 dark:hover:border-emerald-500`}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Resumen General</h3>
-                <TrendingUp className="size-8 text-emerald-600" />
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <TrendingUp
+                className="size-16 shrink-0 text-emerald-600 dark:text-emerald-500"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Resumen General
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
                 Ingresos, ventas, alertas y medio de pago principal.
               </p>
-              <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="max-w-xs px-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 Filtro activo: {filtroLabel}
               </p>
             </button>
@@ -770,13 +790,16 @@ const ReportsDashboardPage = (): ReactElement => {
             <button
               type="button"
               onClick={() => setIsPaymentModalOpen(true)}
-              className={LAUNCHER_CARD_CLASS_NAME}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-indigo-400 dark:hover:border-indigo-500`}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Análisis de Medios de Pago</h3>
-                <CreditCard className="size-8 text-indigo-600" />
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <CreditCard
+                className="size-16 shrink-0 text-indigo-600 dark:text-indigo-500"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Análisis de Medios de Pago
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
                 Efectivo, QR, transferencia y débito con montos.
               </p>
             </button>
@@ -784,13 +807,16 @@ const ReportsDashboardPage = (): ReactElement => {
             <button
               type="button"
               onClick={() => setIsSessionModalOpen(true)}
-              className={LAUNCHER_CARD_CLASS_NAME}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-zinc-400 dark:hover:border-zinc-500`}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Rendimiento por Sesión</h3>
-                <BarChart3 className="size-8 text-zinc-700" />
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <BarChart3
+                className="size-16 shrink-0 text-zinc-700 dark:text-zinc-300"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Rendimiento por Sesión
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
                 Comparativa visual de ingresos por tipo de sesión.
               </p>
             </button>
@@ -798,13 +824,16 @@ const ReportsDashboardPage = (): ReactElement => {
             <button
               type="button"
               onClick={() => setIsProductsModalOpen(true)}
-              className={LAUNCHER_CARD_CLASS_NAME}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-amber-400 dark:hover:border-amber-500`}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Ranking de Productos</h3>
-                <Package className="size-8 text-amber-600" />
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <Package
+                className="size-16 shrink-0 text-amber-600 dark:text-amber-500"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Ranking de Productos
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
                 Tabla completa de productos más vendidos.
               </p>
             </button>
@@ -812,17 +841,51 @@ const ReportsDashboardPage = (): ReactElement => {
             <button
               type="button"
               onClick={() => setIsInventoryModalOpen(true)}
-              className={LAUNCHER_CARD_CLASS_NAME}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-sky-400 dark:hover:border-sky-500`}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Auditoría de Movimientos</h3>
-                <ClipboardList className="size-8 text-sky-600" />
-              </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <ClipboardList
+                className="size-16 shrink-0 text-sky-600 dark:text-sky-500"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Auditoría de Movimientos
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
                 Historial de inventario para control y trazabilidad.
               </p>
             </button>
+
+            {isAuthProfileLoading ? (
+              <div
+                className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} animate-pulse cursor-default border-zinc-200/90 dark:border-zinc-800`}
+                aria-busy="true"
+                aria-label="Cargando tarjeta de usuarios"
+              >
+                <div className="size-16 shrink-0 rounded-2xl bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-7 w-28 rounded-lg bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-4 w-full max-w-[220px] rounded bg-zinc-200 dark:bg-zinc-700" />
+                <div className="h-3 w-full max-w-[180px] rounded bg-zinc-200/80 dark:bg-zinc-600/80" />
+              </div>
+            ) : authenticatedUserRole === "ADMIN" ? (
+              <button
+                type="button"
+                onClick={() => setIsUsersManagementPanelOpen(true)}
+                className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-violet-400 dark:hover:border-violet-500`}
+              >
+                <Users
+                  className="size-16 shrink-0 text-violet-600 dark:text-violet-500"
+                  aria-hidden
+                />
+                <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                  Usuarios
+                </span>
+                <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
+                  Roles, estado y permisos del equipo.
+                </p>
+              </button>
+            ) : null}
           </section>
+          </div>
         </div>
       </main>
 
@@ -852,6 +915,16 @@ const ReportsDashboardPage = (): ReactElement => {
                 </p>
               </article>
               <article className={STANDARD_CARD_CLASS_NAME}>
+                <p className="text-sm font-semibold text-slate-600">
+                  Utilidad real ({filtroLabel})
+                </p>
+                <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
+                  {filteredGrossProfitAmount === null
+                    ? "…"
+                    : formatArgentinaPesos(filteredGrossProfitAmount)}
+                </p>
+              </article>
+              <article className={STANDARD_CARD_CLASS_NAME}>
                 <p className="text-sm font-semibold text-slate-600">Medio de pago principal</p>
                 <p className="mt-2 text-xl font-bold tabular-nums text-slate-900">
                   {dominantPaymentMethodSummary === null
@@ -862,7 +935,17 @@ const ReportsDashboardPage = (): ReactElement => {
                   {dominantPaymentMethodSummary?.displayLabel ?? ""}
                 </p>
               </article>
+              <article className={STANDARD_CARD_CLASS_NAME}>
+                <p className="text-sm font-semibold text-slate-600">Ticket promedio</p>
+                <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
+                  {averageTicketAmount === null
+                    ? "…"
+                    : formatArgentinaPesos(averageTicketAmount)}
+                </p>
+              </article>
             </div>,
+            "max-w-6xl",
+            <TrendingUp className="size-7" aria-hidden />,
           )
         : null}
 
@@ -870,46 +953,67 @@ const ReportsDashboardPage = (): ReactElement => {
         ? renderModal(
             "Análisis de Medios de Pago",
             () => setIsPaymentModalOpen(false),
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {dailyClosureReportMetrics === null ? (
                 <p className="text-sm text-slate-500">Cargando medios de pago…</p>
               ) : (
-                <>
-                  <article className={STANDARD_CARD_CLASS_NAME}>
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <Wallet className="size-4 text-emerald-600" /> Efectivo
-                    </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums">
-                      {formatArgentinaPesos(dailyClosureReportMetrics.revenueTotalCash)}
-                    </p>
-                  </article>
-                  <article className={STANDARD_CARD_CLASS_NAME}>
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <QrCode className="size-4 text-indigo-600" /> QR
-                    </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums">
-                      {formatArgentinaPesos(dailyClosureReportMetrics.revenueTotalQr)}
-                    </p>
-                  </article>
-                  <article className={STANDARD_CARD_CLASS_NAME}>
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <Landmark className="size-4 text-sky-600" /> Transferencia
-                    </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums">
-                      {formatArgentinaPesos(dailyClosureReportMetrics.revenueTotalTransfer)}
-                    </p>
-                  </article>
-                  <article className={STANDARD_CARD_CLASS_NAME}>
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <WalletCards className="size-4 text-violet-600" /> Débito
-                    </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums">
-                      {formatArgentinaPesos(dailyClosureReportMetrics.revenueTotalDebit)}
-                    </p>
-                  </article>
-                </>
+                ([
+                  {
+                    label: "Efectivo",
+                    amount: dailyClosureReportMetrics.revenueTotalCash,
+                    icon: <Wallet className="size-4 text-emerald-600" />,
+                  },
+                  {
+                    label: "QR",
+                    amount: dailyClosureReportMetrics.revenueTotalQr,
+                    icon: <QrCode className="size-4 text-emerald-600" />,
+                  },
+                  {
+                    label: "Transferencia",
+                    amount: dailyClosureReportMetrics.revenueTotalTransfer,
+                    icon: <Landmark className="size-4 text-emerald-600" />,
+                  },
+                  {
+                    label: "Débito",
+                    amount: dailyClosureReportMetrics.revenueTotalDebit,
+                    icon: <WalletCards className="size-4 text-emerald-600" />,
+                  },
+                ] as const).map((paymentRow) => {
+                  const totalRevenue = Math.max(
+                    dailyClosureReportMetrics.totalRevenue,
+                    0,
+                  );
+                  const percentage =
+                    totalRevenue > 0
+                      ? (paymentRow.amount / totalRevenue) * 100
+                      : 0;
+                  return (
+                    <article key={paymentRow.label} className={STANDARD_CARD_CLASS_NAME}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {paymentRow.icon}
+                          {paymentRow.label}
+                        </div>
+                        <span className="text-xs font-semibold text-zinc-500">
+                          {percentage.toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xl font-bold tabular-nums">
+                        {formatArgentinaPesos(paymentRow.amount)}
+                      </p>
+                      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-950/30">
+                        <div
+                          className="h-full rounded-full bg-linear-to-r from-emerald-500 to-emerald-700 transition-all duration-500"
+                          style={{ width: `${Math.max(0, Math.min(percentage, 100))}%` }}
+                        />
+                      </div>
+                    </article>
+                  );
+                })
               )}
             </div>,
+            "max-w-6xl",
+            <CreditCard className="size-7" aria-hidden />,
           )
         : null}
 
@@ -926,6 +1030,8 @@ const ReportsDashboardPage = (): ReactElement => {
               </article>
               <article className={STANDARD_CARD_CLASS_NAME}>{renderSessionChart()}</article>
             </div>,
+            "max-w-6xl",
+            <BarChart3 className="size-7" aria-hidden />,
           )
         : null}
 
@@ -973,6 +1079,8 @@ const ReportsDashboardPage = (): ReactElement => {
                 </tbody>
               </table>
             </div>,
+            "max-w-6xl",
+            <Package className="size-7" aria-hidden />,
           )
         : null}
 
@@ -986,139 +1094,90 @@ const ReportsDashboardPage = (): ReactElement => {
                   {inventoryErrorMessage}
                 </p>
               ) : null}
-              <div className="overflow-x-auto rounded-xl border border-zinc-200">
-                <table className="w-full min-w-[980px] text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Fecha</th>
-                      <th className="px-4 py-3 font-medium">Producto</th>
-                      <th className="px-4 py-3 font-medium">Operador</th>
-                      <th className="px-4 py-3 font-medium">Rol</th>
-                      <th className="px-4 py-3 font-medium">Tipo</th>
-                      <th className="px-4 py-3 font-medium">Motivo</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200 bg-white">
-                    {isLoadingInventoryMovements ? (
+              {!isLoadingInventoryMovements &&
+              recentInventoryMovements.length === 0 &&
+              inventoryErrorMessage.length === 0 ? (
+                <div className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-3xl border border-zinc-200 bg-white p-8 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="flex size-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                    <Search className="size-7" aria-hidden />
+                  </div>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    No se encontraron movimientos para esta fecha
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Probá cambiando la fecha o el filtro de arqueo.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <table className="w-full min-w-[980px] text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600 dark:bg-zinc-800/50 dark:text-zinc-300">
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                          Cargando movimientos…
-                        </td>
+                        <th className="px-4 py-3 font-medium">Fecha</th>
+                        <th className="px-4 py-3 font-medium">Producto</th>
+                        <th className="px-4 py-3 font-medium">Operador</th>
+                        <th className="px-4 py-3 font-medium">Rol</th>
+                        <th className="px-4 py-3 font-medium">Tipo</th>
+                        <th className="px-4 py-3 font-medium">Motivo</th>
                       </tr>
-                    ) : recentInventoryMovements.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                          No hay movimientos para mostrar.
-                        </td>
-                      </tr>
-                    ) : (
-                      recentInventoryMovements.map((movementRow) => (
-                        <tr key={movementRow.movementIdentifier} className="hover:bg-slate-50">
-                          <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                            {movementRow.createdAtIso.length > 0
-                              ? formatArgentinaDateTimeFromIso(movementRow.createdAtIso)
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-3 font-medium text-slate-900">
-                            {movementRow.productName}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {movementRow.operatorFullName ?? "—"}
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">
-                            {movementRow.operatorRole === "ADMIN"
-                              ? "Administrador"
-                              : movementRow.operatorRole === "OPERATOR"
-                                ? "Operador"
-                                : "—"}
-                          </td>
-                          <td className="px-4 py-3">
-                            <InventoryMovementTypeBadge movementType={movementRow.movementType} />
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {movementRow.reason.length > 0
-                              ? translateInventoryMovementReasonForDisplay(movementRow.reason)
-                              : "—"}
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 bg-white dark:divide-zinc-800 dark:bg-zinc-900">
+                      {isLoadingInventoryMovements ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-slate-500 dark:text-zinc-400">
+                            Cargando movimientos…
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : (
+                        recentInventoryMovements.map((movementRow) => (
+                          <tr key={movementRow.movementIdentifier} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40">
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-700 dark:text-zinc-200">
+                              {movementRow.createdAtIso.length > 0
+                                ? formatArgentinaDateTimeFromIso(movementRow.createdAtIso)
+                                : "—"}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-zinc-100">
+                              {movementRow.productName}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-zinc-200">
+                              {movementRow.operatorFullName ?? "—"}
+                            </td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-zinc-200">
+                              {movementRow.operatorRole === "ADMIN"
+                                ? "Administrador"
+                                : movementRow.operatorRole === "OPERATOR"
+                                  ? "Operador"
+                                  : "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <InventoryMovementTypeBadge movementType={movementRow.movementType} />
+                            </td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-zinc-300">
+                              {movementRow.reason.length > 0
+                                ? translateInventoryMovementReasonForDisplay(movementRow.reason)
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>,
             "max-w-7xl",
+            <ClipboardList className="size-7" aria-hidden />,
           )
         : null}
 
-      {isInviteUserModalOpen
-        ? renderModal(
-            "Invitación de Usuario",
-            () => setIsInviteUserModalOpen(false),
-            <div className="mx-auto w-full max-w-xl space-y-4">
-              <p className="text-sm text-slate-600">
-                Enviá una invitación oficial y preasigná el rol para el acceso al
-                sistema.
-              </p>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Email</span>
-                <input
-                  type="email"
-                  value={inviteEmailInput}
-                  onChange={(event) => setInviteEmailInput(event.target.value)}
-                  placeholder="usuario@dominio.com"
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Rol</span>
-                <select
-                  value={inviteRoleInput}
-                  onChange={(event) =>
-                    setInviteRoleInput(event.target.value as InviteRole)
-                  }
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="ADMIN">ADMIN</option>
-                  <option value="OPERADOR">OPERADOR</option>
-                </select>
-              </label>
-
-              {inviteUserErrorMessage.length > 0 ? (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {inviteUserErrorMessage}
-                </p>
-              ) : null}
-              {inviteUserSuccessMessage.length > 0 ? (
-                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  {inviteUserSuccessMessage}
-                </p>
-              ) : null}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsInviteUserModalOpen(false)}
-                  disabled={isSendingInvitation}
-                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Cerrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleInviteUserSubmit();
-                  }}
-                  disabled={isSendingInvitation}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                >
-                  {isSendingInvitation ? "Enviando…" : "Enviar invitación"}
-                </button>
-              </div>
-            </div>,
-            "max-w-2xl",
-          )
-        : null}
+      {authenticatedUserRole === "ADMIN" &&
+      authenticatedUserIdentifier.length > 0 ? (
+        <UserManagementModal
+          isOpen={isUsersManagementPanelOpen}
+          onClose={() => setIsUsersManagementPanelOpen(false)}
+          currentAdministratorUserIdentifier={authenticatedUserIdentifier}
+        />
+      ) : null}
 
       <DailyClosurePrintReceipt
         dailyClosureReportMetrics={dailyClosureReportMetrics}

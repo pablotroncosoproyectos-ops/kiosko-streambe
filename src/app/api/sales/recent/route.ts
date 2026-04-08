@@ -1,11 +1,12 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import {
-  getBuenosAiresZonedDayBoundsUtcIsoStrings,
-  getCurrentBuenosAiresCalendarDateYyyyMmDd,
-} from "@/lib/buenosAiresReportingCalendar";
 import { requireAuthenticatedAuthorizedSupabaseClient } from "@/lib/supabase-server-route";
 
 const RECENT_SALES_LIMIT = 20;
+
+const VENTA_LIBRE_SESSION_TYPE = "VENTA_LIBRE";
+const RECREO_SESSION_TYPE = "RECREO";
+const OPEN_SESSION_STATUS = "OPEN";
 
 type HistoryScope = "ventaLibre" | "recreo" | "ventaTotal";
 
@@ -21,8 +22,6 @@ interface SalesSessionRow {
   id: string;
   user_id: string;
   session_type: "RECREO" | "VENTA_LIBRE" | string;
-  status?: "OPEN" | "CLOSED" | string;
-  started_at?: string;
 }
 
 interface UserRow {
@@ -72,6 +71,54 @@ function parseHistoryScope(raw: string | null): HistoryScope | null {
   return null;
 }
 
+async function resolveOpenVentaLibreSessionIdentifier(
+  supabaseServerClient: SupabaseClient,
+): Promise<string | null> {
+  const { data: openSessionRow, error: openSessionError } =
+    await supabaseServerClient
+      .from("sales_sessions")
+      .select("id")
+      .eq("session_type", VENTA_LIBRE_SESSION_TYPE)
+      .eq("status", OPEN_SESSION_STATUS)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (openSessionError) {
+    return null;
+  }
+
+  const sessionIdentifier = openSessionRow?.id;
+  return typeof sessionIdentifier === "string" && sessionIdentifier.trim().length > 0
+    ? sessionIdentifier.trim()
+    : null;
+}
+
+async function resolveOpenRecreoSessionIdentifierForOperator(
+  supabaseServerClient: SupabaseClient,
+  operatorUserIdentifier: string,
+): Promise<string | null> {
+  const { data: openSessionRow, error: openSessionError } =
+    await supabaseServerClient
+      .from("sales_sessions")
+      .select("id")
+      .eq("user_id", operatorUserIdentifier)
+      .eq("session_type", RECREO_SESSION_TYPE)
+      .eq("status", OPEN_SESSION_STATUS)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  if (openSessionError) {
+    return null;
+  }
+
+  const sessionIdentifier = openSessionRow?.id;
+  return typeof sessionIdentifier === "string" && sessionIdentifier.trim().length > 0
+    ? sessionIdentifier.trim()
+    : null;
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   try {
     const supabaseServerClient =
@@ -93,53 +140,20 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const authenticatedUserIdentifier = authenticationData.user.id;
 
-    const reportCalendarDateYyyyMmDd =
-      getCurrentBuenosAiresCalendarDateYyyyMmDd();
-    const { rangeStartInclusiveUtcIso, rangeEndExclusiveUtcIso } =
-      getBuenosAiresZonedDayBoundsUtcIsoStrings(reportCalendarDateYyyyMmDd);
+    let targetSessionIdentifier: string | null = null;
 
-    const { data: daySessionRows, error: daySessionsError } =
-      await supabaseServerClient
-        .from("sales_sessions")
-        .select("id, user_id, session_type, status, started_at")
-        .gte("started_at", rangeStartInclusiveUtcIso)
-        .lt("started_at", rangeEndExclusiveUtcIso);
-
-    if (daySessionsError) {
-      return NextResponse.json(
-        { message: "No se pudo cargar el historial de ventas" },
-        { status: 500 },
-      );
+    if (historyScope === "ventaLibre" || historyScope === "ventaTotal") {
+      targetSessionIdentifier =
+        await resolveOpenVentaLibreSessionIdentifier(supabaseServerClient);
+    } else if (historyScope === "recreo") {
+      targetSessionIdentifier =
+        await resolveOpenRecreoSessionIdentifierForOperator(
+          supabaseServerClient,
+          authenticatedUserIdentifier,
+        );
     }
 
-    const sessions = (daySessionRows ?? []) as SalesSessionRow[];
-    const sessionIdentifiersByScope = new Set<string>();
-    const activeRecreoSession = sessions
-      .filter(
-        (row) =>
-          row.user_id === authenticatedUserIdentifier &&
-          row.session_type === "RECREO" &&
-          row.status === "OPEN",
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.started_at ?? 0).getTime() -
-          new Date(a.started_at ?? 0).getTime(),
-      )[0];
-
-    for (const row of sessions) {
-      if (historyScope === "ventaLibre" && row.session_type !== "VENTA_LIBRE") {
-        continue;
-      }
-      if (historyScope === "recreo") {
-        if (!activeRecreoSession || row.id !== activeRecreoSession.id) {
-          continue;
-        }
-      }
-      sessionIdentifiersByScope.add(row.id);
-    }
-
-    if (sessionIdentifiersByScope.size === 0) {
+    if (targetSessionIdentifier === null) {
       return NextResponse.json(
         { recentSalesHistory: [], historyScope },
         { status: 200 },
@@ -150,9 +164,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       await supabaseServerClient
         .from("sales")
         .select("id, total_price, payment_method, created_at, session_id")
-        .in("session_id", Array.from(sessionIdentifiersByScope))
-        .gte("created_at", rangeStartInclusiveUtcIso)
-        .lt("created_at", rangeEndExclusiveUtcIso)
+        .eq("session_id", targetSessionIdentifier)
         .order("created_at", { ascending: false })
         .limit(RECENT_SALES_LIMIT);
 
@@ -173,10 +185,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const sessionIdentifiers = [...new Set(saleRows.map((row) => row.session_id))];
 
-    const { data: sessionRows, error: sessionsError } = await supabaseServerClient
-      .from("sales_sessions")
-      .select("id, user_id, session_type")
-      .in("id", sessionIdentifiers);
+    const { data: sessionRows, error: sessionsError } =
+      await supabaseServerClient
+        .from("sales_sessions")
+        .select("id, user_id, session_type")
+        .in("id", sessionIdentifiers);
 
     if (sessionsError) {
       return NextResponse.json(

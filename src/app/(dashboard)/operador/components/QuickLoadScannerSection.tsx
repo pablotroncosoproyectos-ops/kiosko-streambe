@@ -33,7 +33,7 @@ const DETECTOR_FORMATS: readonly string[] = [
   "codabar",
 ];
 
-/** Evita doble lectura del mismo código (cámara + pistola o frames seguidos). */
+/** Evita doble lectura del mismo c?digo (c?mara + pistola o frames seguidos). */
 const SCAN_DEBOUNCE_MS = 900;
 const GUN_INTERKEY_GAP_MS = 120;
 const DETECT_INTERVAL_MS = 250;
@@ -89,7 +89,8 @@ export function QuickLoadScannerSection({
   );
   const [lastFeedback, setLastFeedback] = useState<string>("");
 
-  const stopCamera = useCallback((): void => {
+  /** Detiene tracks y timers sin actualizar estado (seguro dentro de efectos). */
+  const releaseMediaTracks = useCallback((): void => {
     if (detectIntervalRef.current !== null) {
       window.clearInterval(detectIntervalRef.current);
       detectIntervalRef.current = null;
@@ -132,7 +133,7 @@ export function QuickLoadScannerSection({
       }
 
       onAddProduct(product, 1, product.price);
-      setLastFeedback(`✓ ${product.name}`);
+      setLastFeedback(`Agregado: ${product.name}`);
       lastProcessedRef.current = { value: trimmed, at: now };
     },
     [onAddProduct, productsForLookup],
@@ -140,8 +141,7 @@ export function QuickLoadScannerSection({
 
   useEffect(() => {
     if (!isActive || !modalVisible) {
-      stopCamera();
-      setCameraError("");
+      releaseMediaTracks();
       return;
     }
 
@@ -150,13 +150,12 @@ export function QuickLoadScannerSection({
       return;
     }
 
-    const BarcodeDetectorClass = getBarcodeDetectorConstructor();
-    setDetectorSupported(BarcodeDetectorClass !== null);
-
     let cancelled = false;
 
     void (async (): Promise<void> => {
       setCameraError("");
+      const BarcodeDetectorClass = getBarcodeDetectorConstructor();
+      setDetectorSupported(BarcodeDetectorClass !== null);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -175,7 +174,7 @@ export function QuickLoadScannerSection({
         await video.play();
       } catch (err: unknown) {
         const message =
-          err instanceof Error ? err.message : "No se pudo abrir la cámara";
+          err instanceof Error ? err.message : "No se pudo abrir la c?mara";
         setCameraError(message);
         return;
       }
@@ -208,16 +207,16 @@ export function QuickLoadScannerSection({
             }
           })
           .catch(() => {
-            /* frame inválido */
+            /* frame inv?lido */
           });
       }, DETECT_INTERVAL_MS);
     })();
 
     return () => {
       cancelled = true;
-      stopCamera();
+      releaseMediaTracks();
     };
-  }, [isActive, modalVisible, processScannedValue, stopCamera]);
+  }, [isActive, modalVisible, processScannedValue, releaseMediaTracks]);
 
   useEffect(() => {
     if (!isActive || !modalVisible) {
@@ -279,7 +278,7 @@ export function QuickLoadScannerSection({
             playsInline
             muted
             autoPlay
-            aria-label="Vista de cámara para escanear códigos"
+            aria-label="Vista de c?mara para escanear c?digos"
           />
           <div
             className="pointer-events-none absolute inset-0 flex items-center justify-center p-8"
@@ -299,7 +298,7 @@ export function QuickLoadScannerSection({
           ) : null}
           {detectorSupported === false ? (
             <p className="text-amber-200/90">
-              Este navegador no soporta BarcodeDetector. Usá la pistola lectora
+              Este navegador no soporta BarcodeDetector. Usa la pistola lectora
               (USB/Bluetooth) o Chrome en Android/desktop.
             </p>
           ) : null}
@@ -307,8 +306,8 @@ export function QuickLoadScannerSection({
             <p className="font-medium text-emerald-300">{lastFeedback}</p>
           ) : null}
           <p className="text-xs text-zinc-400">
-            Enfocá el código dentro del recuadro. Pistola: apuntá fuera de
-            campos de texto y presioná Enter al finalizar.
+            Enfoca el c?digo dentro del recuadro. Pistola: apunta fuera de
+            campos de texto y presiona Enter al finalizar.
           </p>
         </div>
       </div>

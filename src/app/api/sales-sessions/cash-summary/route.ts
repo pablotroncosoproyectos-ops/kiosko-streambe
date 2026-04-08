@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedUserProfile } from "@/lib/supabase-server-route";
 import { requireAuthenticatedAuthorizedSupabaseClient } from "@/lib/supabase-server-route";
 import { getOpenSessionCashSummaryForOperator } from "@/services/salesSessionService";
 
@@ -8,11 +7,8 @@ export async function GET(): Promise<NextResponse> {
     const supabaseServerClient =
       await requireAuthenticatedAuthorizedSupabaseClient(["ADMIN", "OPERATOR"]);
 
-    const authenticatedUserProfile = await getAuthenticatedUserProfile();
-
     const summary = await getOpenSessionCashSummaryForOperator(
       supabaseServerClient,
-      authenticatedUserProfile.id,
     );
 
     return NextResponse.json(

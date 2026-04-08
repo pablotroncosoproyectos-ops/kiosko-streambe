@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useState, type ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import type { Product } from "@/types/database";
 
 const MODAL_CLOSE_BUTTON_CLASS =
@@ -31,12 +31,6 @@ export function StockToolsModal({
   onSelectProductForAdjustment,
 }: StockToolsModalProps): ReactElement | null {
   const [selectedProductId, setSelectedProductId] = useState("");
-
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedProductId("");
-    }
-  }, [isOpen]);
 
   if (!isOpen) {
     return null;

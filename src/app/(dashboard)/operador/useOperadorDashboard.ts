@@ -9,6 +9,7 @@ import type {
   CartItem,
   CatalogBrowseMode,
   OperatorCashSessionState,
+  OperatorCloseCashSummaryPayload,
   ProductsApiResponse,
   RecentSalesHistoryApiResponse,
   RecentSaleHistoryRecord,
@@ -87,6 +88,8 @@ export function useOperadorDashboard() {
     useState<boolean>(false);
   const [isStockToolsModalOpen, setIsStockToolsModalOpen] =
     useState<boolean>(false);
+  const [stockToolsModalInstanceKey, setStockToolsModalInstanceKey] =
+    useState<number>(0);
   const [stockToolsModalBackdropVisible, setStockToolsModalBackdropVisible] =
     useState<boolean>(false);
   const [stockAdjustmentModalBackdropVisible, setStockAdjustmentModalBackdropVisible] =
@@ -120,18 +123,14 @@ export function useOperadorDashboard() {
     useState<string>("");
   const [isCloseCashModalOpen, setIsCloseCashModalOpen] =
     useState<boolean>(false);
+  const [closeCashModalInstanceKey, setCloseCashModalInstanceKey] =
+    useState<number>(0);
   const [physicalCashInput, setPhysicalCashInput] = useState<string>("");
   const [openingBalanceCashInput, setOpeningBalanceCashInput] =
     useState<string>("");
   const [expensesCashInput, setExpensesCashInput] = useState<string>("");
-  const [cashSummaryPayload, setCashSummaryPayload] = useState<{
-    sessionIdentifier: string;
-    sessionType: string;
-    openingBalance: number;
-    expensesTotal: number;
-    cashSalesTotal: number;
-    expectedCashBalance: number;
-  } | null>(null);
+  const [cashSummaryPayload, setCashSummaryPayload] =
+    useState<OperatorCloseCashSummaryPayload | null>(null);
   const [isLoadingCashSummary, setIsLoadingCashSummary] =
     useState<boolean>(false);
   const [closeCashErrorMessage, setCloseCashErrorMessage] =
@@ -363,14 +362,7 @@ export function useOperadorDashboard() {
         credentials: "include",
       });
       const responseBody = (await response.json()) as {
-        cashSummary?: {
-          sessionIdentifier: string;
-          sessionType: string;
-          openingBalance: number;
-          expensesTotal: number;
-          cashSalesTotal: number;
-          expectedCashBalance: number;
-        } | null;
+        cashSummary?: OperatorCloseCashSummaryPayload | null;
         message?: string;
       };
       if (response.status === 401) {
@@ -489,6 +481,11 @@ export function useOperadorDashboard() {
     setIsStockToolsModalOpen(false);
   }
 
+  const openStockToolsModal = useCallback((): void => {
+    setStockToolsModalInstanceKey((previous) => previous + 1);
+    setIsStockToolsModalOpen(true);
+  }, []);
+
   async function handleStockAdjustmentSubmit(): Promise<void> {
     if (stockAdjustmentProduct === null) {
       return;
@@ -553,6 +550,7 @@ export function useOperadorDashboard() {
   }
 
   async function openCloseCashModal(): Promise<void> {
+    setCloseCashModalInstanceKey((previous) => previous + 1);
     setIsCloseCashModalOpen(true);
     setCloseCashErrorMessage("");
     setShiftClosingNotesInput("");
@@ -565,14 +563,7 @@ export function useOperadorDashboard() {
         credentials: "include",
       });
       const responseBody = (await response.json()) as {
-        cashSummary?: {
-          sessionIdentifier: string;
-          sessionType: string;
-          openingBalance: number;
-          expensesTotal: number;
-          cashSalesTotal: number;
-          expectedCashBalance: number;
-        } | null;
+        cashSummary?: OperatorCloseCashSummaryPayload | null;
         message?: string;
       };
       if (response.status === 401) {
@@ -632,11 +623,48 @@ export function useOperadorDashboard() {
       setCloseCashErrorMessage("Gastos inválidos");
       return;
     }
+    const cashSalesTotalForClose = cashSummaryPayload?.cashSalesTotal ?? 0;
+    const expectedCashForClose =
+      openingParsed + cashSalesTotalForClose - expensesParsed;
+    const cashDifferenceForClose = physicalParsed - expectedCashForClose;
+    const CLOSING_NOTES_EPSILON = 0.01;
+    const requiresClosingNotesForSubmit =
+      expensesParsed > 0 ||
+      Math.abs(cashDifferenceForClose) > CLOSING_NOTES_EPSILON;
+    if (requiresClosingNotesForSubmit && shiftClosingNotesInput.trim().length === 0) {
+      setCloseCashErrorMessage(
+        "Indique observaciones del cierre (gastos o diferencia de caja)",
+      );
+      return;
+    }
 
     setIsSubmittingCloseCash(true);
     setCloseCashErrorMessage("");
 
     try {
+      let closedByUserIdentifier: string | null = null;
+      try {
+        const meResponse = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (meResponse.status === 401) {
+          window.location.assign("/login");
+          return;
+        }
+        if (meResponse.ok) {
+          const meBody = (await meResponse.json()) as {
+            userProfile?: { id?: string };
+          };
+          closedByUserIdentifier =
+            typeof meBody.userProfile?.id === "string"
+              ? meBody.userProfile.id
+              : null;
+        }
+      } catch {
+        closedByUserIdentifier = null;
+      }
+
       const response = await fetch("/api/sales-sessions/close-cash", {
         method: "POST",
         credentials: "include",
@@ -645,10 +673,11 @@ export function useOperadorDashboard() {
           physicalCash: physicalParsed,
           openingBalance: openingParsed,
           expensesTotal: expensesParsed,
-          shiftClosingNotes:
+          expense_notes:
             shiftClosingNotesInput.trim().length > 0
               ? shiftClosingNotesInput.trim()
               : null,
+          closed_by: closedByUserIdentifier,
         }),
       });
       const responseBody = (await response.json()) as { message?: string };
@@ -821,6 +850,7 @@ export function useOperadorDashboard() {
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     if (search.get("tools") === "stock") {
+      setStockToolsModalInstanceKey((previous) => previous + 1);
       setIsStockToolsModalOpen(true);
     }
   }, []);
@@ -1333,6 +1363,8 @@ export function useOperadorDashboard() {
     setIsBarcodeCameraScannerOpen,
     isStockToolsModalOpen,
     setIsStockToolsModalOpen,
+    stockToolsModalInstanceKey,
+    openStockToolsModal,
     stockToolsModalBackdropVisible,
     stockAdjustmentModalBackdropVisible,
     isCreateProductModalOpen,
@@ -1361,6 +1393,7 @@ export function useOperadorDashboard() {
     stockAdjustmentErrorMessage,
     setStockAdjustmentErrorMessage,
     isCloseCashModalOpen,
+    closeCashModalInstanceKey,
     setIsCloseCashModalOpen,
     physicalCashInput,
     setPhysicalCashInput,

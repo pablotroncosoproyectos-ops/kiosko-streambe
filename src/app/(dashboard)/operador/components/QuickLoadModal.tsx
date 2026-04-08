@@ -105,7 +105,7 @@ export function QuickLoadModal(props: QuickLoadModalProps): ReactElement {
                 <div className="text-left leading-tight">
                   <h2 className={`text-[13px] font-bold md:text-sm ${
                     displayView === "manual" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100"
-                  }`}>Carga rápida</h2>
+                  }`}>Venta Libre</h2>
                   <p className="text-[10px] text-zinc-500">Manual</p>
                 </div>
               </button>

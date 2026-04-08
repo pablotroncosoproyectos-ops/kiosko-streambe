@@ -45,6 +45,11 @@ export function SaleModal({
   const pdfBusy =
     historyTicketPdfLoadingSaleId !== null || historyReportPdfLoading;
 
+  const historySessionHint =
+    saleHistoryTab === "recreo"
+      ? "Solo ventas del recreo abierto (misma sesión activa)."
+      : "Solo ventas de la sesión de caja abierta (Venta libre).";
+
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-0 backdrop-blur-md transition-opacity duration-300 ease-out md:p-6 ${
@@ -74,8 +79,8 @@ export function SaleModal({
               </h2>
               <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
                 {recentSalesForActiveHistoryTab.length} venta
-                {recentSalesForActiveHistoryTab.length === 1 ? "" : "s"} en
-                esta vista
+                {recentSalesForActiveHistoryTab.length === 1 ? "" : "s"} ·{" "}
+                {historySessionHint}
               </p>
               <button
                 type="button"

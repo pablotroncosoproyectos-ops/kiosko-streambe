@@ -7,6 +7,8 @@ interface CloseCashRequestBody {
   physicalCash: number;
   openingBalance?: number | null;
   expensesTotal?: number | null;
+  expense_notes?: string | null;
+  closed_by?: string | null;
   shiftClosingNotes?: string | null;
 }
 
@@ -36,10 +38,18 @@ function isValidCloseCashBody(
       Number.isFinite(parsedBody.expensesTotal) &&
       parsedBody.expensesTotal >= 0);
   const notesOk =
+    parsedBody.expense_notes === undefined ||
+    parsedBody.expense_notes === null ||
+    typeof parsedBody.expense_notes === "string";
+  const closedByOk =
+    parsedBody.closed_by === undefined ||
+    parsedBody.closed_by === null ||
+    typeof parsedBody.closed_by === "string";
+  const legacyNotesOk =
     parsedBody.shiftClosingNotes === undefined ||
     parsedBody.shiftClosingNotes === null ||
     typeof parsedBody.shiftClosingNotes === "string";
-  return openingOk && expensesOk && notesOk;
+  return openingOk && expensesOk && notesOk && closedByOk && legacyNotesOk;
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -73,7 +83,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       requestBody.physicalCash,
       resolvedOpeningBalance,
       resolvedExpensesTotal,
-      requestBody.shiftClosingNotes,
+      requestBody.expense_notes ?? requestBody.shiftClosingNotes,
+      requestBody.closed_by ?? authenticatedUserProfile.id,
     );
 
     return NextResponse.json(
@@ -109,6 +120,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (error.message === "Unable to close session") {
         return NextResponse.json(
           { message: "No se pudo cerrar la sesión. Compruebe columnas en la base de datos." },
+          { status: 500 },
+        );
+      }
+      if (error.message === "Unable to close open recreation sessions") {
+        return NextResponse.json(
+          {
+            message:
+              "La caja se cerró pero no se pudieron cerrar las sesiones de recreo abiertas. Revise la base de datos o contacte soporte.",
+          },
           { status: 500 },
         );
       }

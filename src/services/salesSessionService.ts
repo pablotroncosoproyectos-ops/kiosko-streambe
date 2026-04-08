@@ -36,12 +36,14 @@ export interface SalesSessionHistoryRow {
   sessionIdentifier: string;
   userIdentifier: string;
   operatorFullName: string | null;
+  closedByFullName: string | null;
   sessionType: string;
   status: string;
   totalAmount: number;
   startedAtIso: string;
   closedAtIso: string | null;
   notes: string | null;
+  expenseNotes: string | null;
   /** Presente si la sesión se cerró con arqueo de caja (columnas en BD). */
   expectedBalance: number | null;
   closingBalance: number | null;
@@ -162,7 +164,7 @@ export async function listSalesSessionsHistoryForAdministrator(
   const { data: sessionRows, error: sessionListError } = await supabaseClient
     .from("sales_sessions")
     .select(
-      "id, user_id, session_type, status, total_amount, started_at, closed_at, notes, expected_balance, closing_balance, cash_difference",
+      "id, user_id, closed_by, session_type, status, total_amount, started_at, closed_at, notes, expense_notes, expected_balance, closing_balance, cash_difference",
     )
     .order("started_at", { ascending: false })
     .limit(safeLimit);
@@ -171,14 +173,18 @@ export async function listSalesSessionsHistoryForAdministrator(
     throw new Error("Unable to load sales sessions history");
   }
 
-  const userIdentifiers = Array.from(
-    new Set(
-      (sessionRows ?? []).map((rowUnknown) => {
-        const row = rowUnknown as Record<string, unknown>;
-        return typeof row.user_id === "string" ? row.user_id : "";
-      }),
-    ),
-  ).filter((identifier) => identifier.length > 0);
+  const userIdentifiers = Array.from(new Set((sessionRows ?? []).flatMap((rowUnknown) => {
+    const row = rowUnknown as Record<string, unknown>;
+    const openedBy =
+      typeof row.user_id === "string" && row.user_id.trim().length > 0
+        ? row.user_id.trim()
+        : "";
+    const closedBy =
+      typeof row.closed_by === "string" && row.closed_by.trim().length > 0
+        ? row.closed_by.trim()
+        : "";
+    return [openedBy, closedBy].filter((identifier) => identifier.length > 0);
+  })));
 
   const fullNameByUserIdentifier = new Map<string, string>();
   if (userIdentifiers.length > 0) {
@@ -207,8 +213,16 @@ export async function listSalesSessionsHistoryForAdministrator(
     const row = rowUnknown as Record<string, unknown>;
     const userIdentifier =
       typeof row.user_id === "string" ? row.user_id : String(row.user_id ?? "");
+    const closedByIdentifier =
+      typeof row.closed_by === "string"
+        ? row.closed_by
+        : String(row.closed_by ?? "");
     const operatorFullName =
       fullNameByUserIdentifier.get(userIdentifier) ?? null;
+    const closedByFullName =
+      closedByIdentifier.trim().length > 0
+        ? fullNameByUserIdentifier.get(closedByIdentifier) ?? null
+        : null;
 
     const totalAmountRaw = row.total_amount;
     const totalAmount =
@@ -220,6 +234,7 @@ export async function listSalesSessionsHistoryForAdministrator(
       sessionIdentifier: String(row.id ?? ""),
       userIdentifier: String(row.user_id ?? ""),
       operatorFullName,
+      closedByFullName,
       sessionType:
         typeof row.session_type === "string"
           ? row.session_type.trim().toUpperCase()
@@ -237,6 +252,10 @@ export async function listSalesSessionsHistoryForAdministrator(
       notes:
         typeof row.notes === "string" && row.notes.trim().length > 0
           ? row.notes.trim()
+          : null,
+      expenseNotes:
+        typeof row.expense_notes === "string" && row.expense_notes.trim().length > 0
+          ? row.expense_notes.trim()
           : null,
       expectedBalance: parseNumericRowValue(row.expected_balance),
       closingBalance: parseNumericRowValue(row.closing_balance),
@@ -285,50 +304,235 @@ export async function getRecreoBreakDisplayForToday(
   };
 }
 
+/** Subtotales de ventas por medio de pago en una sesión o grupo de sesiones. */
+export interface SalesByPaymentMethodBreakdown {
+  cash: number;
+  debit: number;
+  transfer: number;
+  qr: number;
+}
+
 export interface OpenSessionCashSummaryPayload {
   sessionIdentifier: string;
   sessionType: string;
   openingBalance: number;
   expensesTotal: number;
+  /** Efectivo total: caja VENTA_LIBRE + sesiones RECREO del alcance del arqueo. */
   cashSalesTotal: number;
+  cashSalesVentaLibreTotal: number;
+  cashSalesRecreoTotal: number;
+  ventaLibreSalesByPaymentMethod: SalesByPaymentMethodBreakdown;
+  recreoSalesByPaymentMethod: SalesByPaymentMethodBreakdown;
+  /** Suma de todos los medios de pago en VL + Recreo (bruto del turno mostrado). */
+  grossSalesTotal: number;
   expectedCashBalance: number;
 }
 
-async function sumCashSalesForSession(
+type NormalizedPaymentArqueoBucket = "CASH" | "DEBIT" | "TRANSFER" | "QR";
+
+function normalizePaymentMethodToArqueoBucket(
+  rawPaymentMethod: unknown,
+): NormalizedPaymentArqueoBucket | null {
+  if (rawPaymentMethod === null || rawPaymentMethod === undefined) {
+    return null;
+  }
+  const asciiFolded = String(rawPaymentMethod)
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const compact = asciiFolded.replace(/\s+/g, "_");
+
+  if (compact === "CASH" || compact === "EFECTIVO") {
+    return "CASH";
+  }
+  if (compact === "DEBIT" || compact === "DEBITO") {
+    return "DEBIT";
+  }
+  if (compact === "TRANSFER" || compact === "TRANSFERENCIA") {
+    return "TRANSFER";
+  }
+  if (compact === "QR") {
+    return "QR";
+  }
+  return null;
+}
+
+function parseSaleTotalPriceValue(rawTotalPrice: unknown): number {
+  if (typeof rawTotalPrice === "number" && Number.isFinite(rawTotalPrice)) {
+    return rawTotalPrice;
+  }
+  const parsed = Number.parseFloat(String(rawTotalPrice ?? "0"));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function createEmptySalesByPaymentMethodBreakdown(): SalesByPaymentMethodBreakdown {
+  return { cash: 0, debit: 0, transfer: 0, qr: 0 };
+}
+
+function sumSalesByPaymentMethodBreakdown(
+  breakdown: SalesByPaymentMethodBreakdown,
+): number {
+  return (
+    breakdown.cash +
+    breakdown.debit +
+    breakdown.transfer +
+    breakdown.qr
+  );
+}
+
+interface ArqueoSalesAggregateResult {
+  ventaLibreSalesByPaymentMethod: SalesByPaymentMethodBreakdown;
+  recreoSalesByPaymentMethod: SalesByPaymentMethodBreakdown;
+}
+
+async function computeArqueoSalesAggregates(
   supabaseClient: SupabaseClient,
-  sessionIdentifier: string,
-): Promise<number> {
+  ventaLibreSessionIdentifier: string,
+  recreoSessionIdentifiers: string[],
+): Promise<ArqueoSalesAggregateResult> {
+  const ventaLibreSalesByPaymentMethod =
+    createEmptySalesByPaymentMethodBreakdown();
+  const recreoSalesByPaymentMethod =
+    createEmptySalesByPaymentMethodBreakdown();
+
+  const sessionIdentifierSet = new Set<string>([ventaLibreSessionIdentifier]);
+  for (const recreoSessionIdentifier of recreoSessionIdentifiers) {
+    if (typeof recreoSessionIdentifier === "string" && recreoSessionIdentifier.trim().length > 0) {
+      sessionIdentifierSet.add(recreoSessionIdentifier.trim());
+    }
+  }
+  const uniqueSessionIdentifiers = [...sessionIdentifierSet];
+
+  if (uniqueSessionIdentifiers.length === 0) {
+    return {
+      ventaLibreSalesByPaymentMethod,
+      recreoSalesByPaymentMethod,
+    };
+  }
+
   const { data: saleRows, error: salesError } = await supabaseClient
     .from("sales")
-    .select("total_price, payment_method")
-    .eq("session_id", sessionIdentifier);
+    .select("total_price, payment_method, session_id")
+    .in("session_id", uniqueSessionIdentifiers);
 
   if (salesError) {
     throw new Error("Unable to load session sales");
   }
 
-  let cashSalesTotal = 0;
   for (const rowUnknown of saleRows ?? []) {
     const row = rowUnknown as Record<string, unknown>;
-    if (row.payment_method === "CASH") {
-      const priceRaw = row.total_price;
-      const line =
-        typeof priceRaw === "number" && Number.isFinite(priceRaw)
-          ? priceRaw
-          : Number.parseFloat(String(priceRaw ?? "0"));
-      cashSalesTotal += Number.isFinite(line) ? line : 0;
+    const bucket = normalizePaymentMethodToArqueoBucket(row.payment_method);
+    if (bucket === null) {
+      continue;
     }
+    const lineAmount = parseSaleTotalPriceValue(row.total_price);
+    const rowSessionIdentifier = row.session_id;
+    const isVentaLibreSaleRow =
+      rowSessionIdentifier === ventaLibreSessionIdentifier;
+
+    const targetBreakdown = isVentaLibreSaleRow
+      ? ventaLibreSalesByPaymentMethod
+      : recreoSalesByPaymentMethod;
+
+    if (bucket === "CASH") {
+      targetBreakdown.cash += lineAmount;
+      continue;
+    }
+    if (bucket === "DEBIT") {
+      targetBreakdown.debit += lineAmount;
+      continue;
+    }
+    if (bucket === "TRANSFER") {
+      targetBreakdown.transfer += lineAmount;
+      continue;
+    }
+    targetBreakdown.qr += lineAmount;
   }
-  return cashSalesTotal;
+
+  return {
+    ventaLibreSalesByPaymentMethod,
+    recreoSalesByPaymentMethod,
+  };
+}
+
+/**
+ * Arqueo de ventas únicamente sobre la sesión VENTA_LIBRE abierta (caja del turno).
+ * Efectivo esperado en cierre: opening_balance + sum(sales.total_price donde payment_method = CASH) - expenses_total.
+ * Los desgloses "Recreo" en el payload quedan en cero: las ventas de recreo usan otro session_id y no entran en esta caja.
+ */
+async function computeArqueoSalesForOpenVentaLibreSession(
+  supabaseClient: SupabaseClient,
+  ventaLibreSessionIdentifier: string,
+): Promise<
+  ArqueoSalesAggregateResult & {
+    cashSalesVentaLibreTotal: number;
+    cashSalesRecreoTotal: number;
+    cashSalesTotal: number;
+    grossSalesTotal: number;
+  }
+> {
+  const aggregates = await computeArqueoSalesAggregates(
+    supabaseClient,
+    ventaLibreSessionIdentifier,
+    [],
+  );
+
+  const cashSalesVentaLibreTotal =
+    aggregates.ventaLibreSalesByPaymentMethod.cash;
+  const cashSalesRecreoTotal = aggregates.recreoSalesByPaymentMethod.cash;
+  const cashSalesTotal = cashSalesVentaLibreTotal + cashSalesRecreoTotal;
+  const grossSalesTotal =
+    sumSalesByPaymentMethodBreakdown(
+      aggregates.ventaLibreSalesByPaymentMethod,
+    ) +
+    sumSalesByPaymentMethodBreakdown(aggregates.recreoSalesByPaymentMethod);
+
+  return {
+    ventaLibreSalesByPaymentMethod: aggregates.ventaLibreSalesByPaymentMethod,
+    recreoSalesByPaymentMethod: aggregates.recreoSalesByPaymentMethod,
+    cashSalesVentaLibreTotal,
+    cashSalesRecreoTotal,
+    cashSalesTotal,
+    grossSalesTotal,
+  };
+}
+
+async function closeOpenRecreoSessionsForOperator(
+  supabaseClient: SupabaseClient,
+  operatorUserIdentifier: string,
+  closedByUserIdentifier: string,
+): Promise<void> {
+  const recreoSessionType = normalizeSessionTypeForDatabase(RECREO_SESSION_TYPE);
+  const openSessionStatus = normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS);
+  const closedSessionStatus = normalizeSessionStatusForDatabase(
+    CLOSED_SESSION_STATUS,
+  );
+  const closedAtIso = new Date().toISOString();
+
+  const { error: updateError } = await supabaseClient
+    .from("sales_sessions")
+    .update({
+      status: closedSessionStatus,
+      closed_at: closedAtIso,
+      closed_by: closedByUserIdentifier,
+    })
+    .eq("user_id", operatorUserIdentifier)
+    .eq("session_type", recreoSessionType)
+    .eq("status", openSessionStatus);
+
+  if (updateError) {
+    throw new Error("Unable to close open recreation sessions");
+  }
 }
 
 /**
  * Sesión de caja del turno (VENTA_LIBRE abierta): una sola por kiosco, compartida entre
  * ADMIN y OPERATOR. No filtra por `user_id` (quien abrió queda en la fila para auditoría).
+ * `expectedCashBalance` = opening_balance + ventas en efectivo (tabla `sales`, session_id de esta sesión) - expenses_total.
  */
 export async function getOpenSessionCashSummaryForOperator(
   supabaseClient: SupabaseClient,
-  _authenticatedUserIdentifier: string,
 ): Promise<OpenSessionCashSummaryPayload | null> {
   const ventaLibreType = normalizeSessionTypeForDatabase(VENTA_LIBRE_SESSION_TYPE);
   const openStatus = normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS);
@@ -353,10 +557,19 @@ export async function getOpenSessionCashSummaryForOperator(
   const sessionIdentifier = openSessionRow.id;
   const openingBalance = parseNumericRowValue(openSessionRow.opening_balance) ?? 0;
   const expensesTotal = parseNumericRowValue(openSessionRow.expenses_total) ?? 0;
-  const cashSalesTotal = await sumCashSalesForSession(
+
+  const {
+    cashSalesVentaLibreTotal,
+    cashSalesRecreoTotal,
+    cashSalesTotal,
+    grossSalesTotal,
+    ventaLibreSalesByPaymentMethod,
+    recreoSalesByPaymentMethod,
+  } = await computeArqueoSalesForOpenVentaLibreSession(
     supabaseClient,
     sessionIdentifier,
   );
+
   const expectedCashBalance = openingBalance + cashSalesTotal - expensesTotal;
 
   return {
@@ -368,6 +581,11 @@ export async function getOpenSessionCashSummaryForOperator(
     openingBalance,
     expensesTotal,
     cashSalesTotal,
+    cashSalesVentaLibreTotal,
+    cashSalesRecreoTotal,
+    ventaLibreSalesByPaymentMethod,
+    recreoSalesByPaymentMethod,
+    grossSalesTotal,
     expectedCashBalance,
   };
 }
@@ -431,17 +649,23 @@ export interface CloseSessionCashPayload {
 
 export async function closeOpenSessionWithCashArqueo(
   supabaseClient: SupabaseClient,
-  _authenticatedUserIdentifier: string,
+  authenticatedUserIdentifier: string,
   physicalCashAmount: number,
   optionalOpeningBalance: number | null,
   optionalExpensesTotal: number | null,
-  rawShiftClosingNotes: unknown,
+  rawExpenseNotes: unknown,
+  rawClosedByUserIdentifier: unknown,
 ): Promise<CloseSessionCashPayload> {
   if (!Number.isFinite(physicalCashAmount) || physicalCashAmount < 0) {
     throw new Error("Invalid physical cash amount");
   }
 
-  const shiftClosingNotes = normalizeShiftClosingNotes(rawShiftClosingNotes);
+  const expenseNotes = normalizeShiftClosingNotes(rawExpenseNotes);
+  const closedByUserIdentifier =
+    typeof rawClosedByUserIdentifier === "string" &&
+    rawClosedByUserIdentifier.trim().length > 0
+      ? rawClosedByUserIdentifier.trim()
+      : authenticatedUserIdentifier;
   const openSessionStatus = normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS);
   const closedSessionStatus = normalizeSessionStatusForDatabase(
     CLOSED_SESSION_STATUS,
@@ -488,7 +712,7 @@ export async function closeOpenSessionWithCashArqueo(
       ? optionalExpensesTotal
       : storedExpenses;
 
-  const cashSalesTotal = await sumCashSalesForSession(
+  const { cashSalesTotal } = await computeArqueoSalesForOpenVentaLibreSession(
     supabaseClient,
     sessionIdentifier,
   );
@@ -506,7 +730,8 @@ export async function closeOpenSessionWithCashArqueo(
       expected_balance: expectedBalance,
       closing_balance: physicalCashAmount,
       cash_difference: cashDifference,
-      shift_closing_notes: shiftClosingNotes,
+      expense_notes: expenseNotes,
+      closed_by: closedByUserIdentifier,
     })
     .eq("id", sessionIdentifier)
     .eq("status", openSessionStatus);
@@ -514,6 +739,12 @@ export async function closeOpenSessionWithCashArqueo(
   if (updateError) {
     throw new Error("Unable to close session");
   }
+
+  await closeOpenRecreoSessionsForOperator(
+    supabaseClient,
+    authenticatedUserIdentifier,
+    closedByUserIdentifier,
+  );
 
   return {
     sessionIdentifier,

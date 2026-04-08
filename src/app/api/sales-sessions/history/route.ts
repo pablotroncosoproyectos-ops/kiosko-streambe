@@ -5,6 +5,28 @@ import { listSalesSessionsHistoryForAdministrator } from "@/services/salesSessio
 
 const DEFAULT_HISTORY_LIMIT = 80;
 
+interface SalesSessionHistoryApiRow {
+  sessionIdentifier: string;
+  userIdentifier: string;
+  operatorFullName: string | null;
+  closedByFullName: string | null;
+  sessionType: string;
+  status: string;
+  totalAmount: number;
+  startedAtIso: string;
+  closedAtIso: string | null;
+  notes: string | null;
+  expenseNotes: string | null;
+  expense_notes: string | null;
+  expectedBalance: number | null;
+  closingBalance: number | null;
+  cashDifference: number | null;
+}
+
+interface SalesSessionsHistoryApiResponse {
+  salesSessionsHistory: SalesSessionHistoryApiRow[];
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   try {
     const supabaseServerClient =
@@ -26,7 +48,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         maximumRowCount,
       );
 
-    return NextResponse.json({ salesSessionsHistory }, { status: 200 });
+    const responseBody: SalesSessionsHistoryApiResponse = {
+      salesSessionsHistory: salesSessionsHistory.map((sessionRow) => ({
+        ...sessionRow,
+        expense_notes: sessionRow.expenseNotes,
+      })),
+    };
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (error: unknown) {
     return buildSanitizedAuthenticatedRouteHandlerResponse(error);
   }

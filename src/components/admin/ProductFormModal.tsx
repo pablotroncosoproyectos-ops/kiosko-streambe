@@ -138,6 +138,21 @@ function deriveMarginPercentFromCostAndPrice(
   return String(Math.round(marginPercent * 100) / 100);
 }
 
+function resolveEffectiveUnitCostForProduct(product: Product): number | null {
+  if (typeof product.costPrice !== "number" || !Number.isFinite(product.costPrice)) {
+    return null;
+  }
+  if (
+    product.isBulk &&
+    typeof product.quantityPerUnit === "number" &&
+    Number.isFinite(product.quantityPerUnit) &&
+    product.quantityPerUnit > 0
+  ) {
+    return product.costPrice / product.quantityPerUnit;
+  }
+  return product.costPrice;
+}
+
 export function ProductFormModal({
   isOpen,
   onClose,
@@ -407,8 +422,86 @@ export function ProductFormModal({
     });
   }, [isOpen, mode, categoryDatalistOptions]);
 
-  const resolvedProductFormPvp = useMemo(() => {
+  const resolvedComboCost = useMemo(() => {
+    let totalCost = 0;
+    let hasMissingComponentCost = false;
+    let hasInvalidComponentQuantity = false;
+
+    for (const [componentProductIdRaw, quantityRaw] of Object.entries(
+      comboComponentsInput,
+    )) {
+      const componentProductId = componentProductIdRaw.trim();
+      if (!isValidProductComponentUuid(componentProductId)) {
+        continue;
+      }
+      const quantityPerCombo = Number.parseFloat(quantityRaw.replace(",", "."));
+      if (!Number.isFinite(quantityPerCombo) || quantityPerCombo <= 0) {
+        hasInvalidComponentQuantity = true;
+        continue;
+      }
+      const componentProduct = productList.find(
+        (catalogProduct) => catalogProduct.id === componentProductId,
+      );
+      if (!componentProduct) {
+        continue;
+      }
+      const componentEffectiveCost = resolveEffectiveUnitCostForProduct(componentProduct);
+      if (componentEffectiveCost === null) {
+        hasMissingComponentCost = true;
+        continue;
+      }
+      totalCost += componentEffectiveCost * quantityPerCombo;
+    }
+
+    return {
+      totalCost: Math.round(totalCost * 100) / 100,
+      hasMissingComponentCost,
+      hasInvalidComponentQuantity,
+    };
+  }, [comboComponentsInput, productList]);
+
+  const resolvedEffectiveCostForProductForm = useMemo(() => {
+    if (isComboProductInput) {
+      return {
+        cost: resolvedComboCost.totalCost,
+        costError: resolvedComboCost.hasInvalidComponentQuantity,
+      };
+    }
+
     const trimmedCost = productCostPriceInput.trim();
+    const parsedQuantityPerUnit = Number.parseFloat(
+      quantityPerUnitInput.replace(",", "."),
+    );
+
+    if (trimmedCost.length === 0) {
+      return { cost: null as number | null, costError: false };
+    }
+
+    const manualCost = Number.parseFloat(trimmedCost.replace(",", "."));
+    if (!Number.isFinite(manualCost) || manualCost < 0) {
+      return { cost: null, costError: true };
+    }
+
+    if (isBulkProductInput) {
+      if (!Number.isFinite(parsedQuantityPerUnit) || parsedQuantityPerUnit <= 0) {
+        return { cost: null, costError: true };
+      }
+      return {
+        cost: Math.round((manualCost / parsedQuantityPerUnit) * 100) / 100,
+        costError: false,
+      };
+    }
+
+    return { cost: manualCost, costError: false };
+  }, [
+    isComboProductInput,
+    resolvedComboCost,
+    productCostPriceInput,
+    quantityPerUnitInput,
+    isBulkProductInput,
+  ]);
+
+  const resolvedProductFormPvp = useMemo(() => {
     const marginRaw = productMarginPercentInput.trim();
     const marginNumber =
       marginRaw.length === 0
@@ -419,7 +512,11 @@ export function ProductFormModal({
       return { pvp: null as number | null, marginError: true, costError: false };
     }
 
-    if (trimmedCost.length === 0) {
+    if (resolvedEffectiveCostForProductForm.costError) {
+      return { pvp: null, marginError: false, costError: true };
+    }
+
+    if (resolvedEffectiveCostForProductForm.cost === null) {
       if (
         mode === "edit" &&
         fallbackCatalogPriceForProductForm !== null
@@ -433,19 +530,16 @@ export function ProductFormModal({
       return { pvp: null, marginError: false, costError: false };
     }
 
-    const costNumber = Number.parseFloat(trimmedCost.replace(",", "."));
-    if (!Number.isFinite(costNumber) || costNumber < 0) {
-      return { pvp: null, marginError: false, costError: true };
-    }
-
     const pvp =
-      Math.round(costNumber * (1 + marginNumber / 100) * 100) / 100;
+      Math.round(
+        resolvedEffectiveCostForProductForm.cost * (1 + marginNumber / 100) * 100,
+      ) / 100;
     return { pvp, marginError: false, costError: false };
   }, [
-    productCostPriceInput,
     productMarginPercentInput,
     mode,
     fallbackCatalogPriceForProductForm,
+    resolvedEffectiveCostForProductForm,
   ]);
 
   function handleClose(): void {
@@ -578,20 +672,6 @@ export function ProductFormModal({
     const parsedQuantityPerUnit = Number.parseFloat(
       quantityPerUnitInput.replace(",", "."),
     );
-    const trimmedCostPrice = productCostPriceInput.trim();
-    let resolvedCostPrice: number | null = null;
-    if (trimmedCostPrice.length > 0) {
-      const parsedCostPrice = Number.parseFloat(
-        trimmedCostPrice.replace(",", "."),
-      );
-      if (!Number.isFinite(parsedCostPrice) || parsedCostPrice < 0) {
-        setFormErrorMessage("Costo (precio de costo) inválido");
-        setIsSavingProductForm(false);
-        return;
-      }
-      resolvedCostPrice = parsedCostPrice;
-    }
-
     if (resolvedProductFormPvp.marginError) {
       setFormErrorMessage("Margen de beneficio (%) inválido");
       setIsSavingProductForm(false);
@@ -604,7 +684,8 @@ export function ProductFormModal({
       return;
     }
 
-    if (mode === "create" && trimmedCostPrice.length === 0) {
+    const resolvedCostPrice = resolvedEffectiveCostForProductForm.cost;
+    if (mode === "create" && resolvedCostPrice === null) {
       setFormErrorMessage("Indique el costo (precio de costo) para calcular el PVP");
       setIsSavingProductForm(false);
       return;
@@ -633,7 +714,7 @@ export function ProductFormModal({
       return;
     }
 
-    if (isBulkProductInput) {
+    if (isBulkProductInput && !isComboProductInput) {
       if (!Number.isFinite(parsedQuantityPerUnit) || parsedQuantityPerUnit <= 0) {
         setFormErrorMessage("Cantidad por unidad inválida para producto granel");
         setIsSavingProductForm(false);
@@ -696,6 +777,11 @@ export function ProductFormModal({
             ? "Los componentes del combo deben ser productos válidos del catálogo (UUID reconocidos)."
             : "Seleccione al menos un componente para el combo",
         );
+        setIsSavingProductForm(false);
+        return;
+      }
+      if (resolvedComboCost.hasInvalidComponentQuantity) {
+        setFormErrorMessage("Cantidad inválida en componentes del combo");
         setIsSavingProductForm(false);
         return;
       }
@@ -1044,18 +1130,44 @@ export function ProductFormModal({
                         inputMode="decimal"
                         min={0}
                         step="0.01"
-                        value={productCostPriceInput}
+                        value={
+                          isComboProductInput
+                            ? resolvedComboCost.totalCost > 0
+                              ? resolvedComboCost.totalCost.toFixed(2)
+                              : ""
+                            : productCostPriceInput
+                        }
                         onChange={(event) =>
                           setProductCostPriceInput(event.target.value)
                         }
-                        className="mt-1 w-full min-w-0 rounded-lg border border-zinc-300/90 bg-zinc-100/80 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-800"
+                        className={`mt-1 w-full min-w-0 rounded-lg border border-zinc-300/90 bg-zinc-100/80 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 ${
+                          isComboProductInput ? "cursor-not-allowed opacity-80" : ""
+                        }`}
                         placeholder="0"
-                        required={mode === "create"}
+                        required={mode === "create" && !isComboProductInput}
+                        readOnly={isComboProductInput}
+                        aria-readonly={isComboProductInput}
                       />
                       <span className="mt-1 block text-xs text-zinc-500">
-                        En edición puede dejarse vacío si el producto aún no tiene
-                        costo registrado (se conserva el PVP actual).
+                        {isComboProductInput
+                          ? "Costo calculado automáticamente por escandallo de componentes."
+                          : "En edición puede dejarse vacío si el producto aún no tiene costo registrado (se conserva el PVP actual)."}
                       </span>
+                      {isBulkProductInput &&
+                      !isComboProductInput &&
+                      resolvedEffectiveCostForProductForm.cost !== null ? (
+                        <span className="mt-1 block text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          Costo por unidad de medida: $
+                          {resolvedEffectiveCostForProductForm.cost.toFixed(2)}
+                        </span>
+                      ) : null}
+                      {isComboProductInput &&
+                      resolvedComboCost.hasMissingComponentCost ? (
+                        <span className="mt-1 block text-xs font-medium text-amber-700 dark:text-amber-300">
+                          Hay componentes sin costo cargado; no se incluyen en el
+                          escandallo.
+                        </span>
+                      ) : null}
                     </label>
 
                     <label className="block">
@@ -1151,9 +1263,17 @@ export function ProductFormModal({
                         name="isBulk"
                         type="checkbox"
                         checked={isBulkProductInput}
-                        onChange={(event) =>
-                          setIsBulkProductInput(event.target.checked)
-                        }
+                        onChange={(event) => {
+                          const isBulkEnabled = event.target.checked;
+                          setIsBulkProductInput(isBulkEnabled);
+                          if (isBulkEnabled) {
+                            setIsComboProductInput(false);
+                            setComboComponentsInput({});
+                            setComboComponentSearchInput("");
+                            setComboComponentSelectedId("");
+                            setComboComponentWarningMessage("");
+                          }
+                        }}
                         className="mt-0.5 size-4 shrink-0 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
                       />
                       <span className="text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-300">
@@ -1189,9 +1309,14 @@ export function ProductFormModal({
                         name="isCombo"
                         type="checkbox"
                         checked={isComboProductInput}
-                        onChange={(event) =>
-                          setIsComboProductInput(event.target.checked)
-                        }
+                        onChange={(event) => {
+                          const isComboEnabled = event.target.checked;
+                          setIsComboProductInput(isComboEnabled);
+                          if (isComboEnabled) {
+                            setIsBulkProductInput(false);
+                            setQuantityPerUnitInput("");
+                          }
+                        }}
                         className="mt-0.5 size-4 shrink-0 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
                       />
                       <span className="text-sm font-semibold leading-snug text-zinc-700 dark:text-zinc-300">

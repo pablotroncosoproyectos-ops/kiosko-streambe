@@ -7,6 +7,7 @@ import type { Product } from "@/types/database";
 import type {
   CartItem,
   CatalogBrowseMode,
+  OperatorCloseCashSummaryPayload,
   RecentSaleHistoryRecord,
   SaleHistoryTab,
   SelectedPaymentMethod,
@@ -71,6 +72,7 @@ export interface ModalsContainerProps {
   setSaleNotesInput: Dispatch<SetStateAction<string>>;
 
   isStockToolsModalOpen: boolean;
+  stockToolsModalInstanceKey: number;
   stockToolsModalBackdropVisible: boolean;
   closeStockToolsModal: () => void;
   closeStockToolsModalImmediately: () => void;
@@ -83,16 +85,11 @@ export interface ModalsContainerProps {
   loadProductsCatalog: () => Promise<void>;
 
   isCloseCashModalOpen: boolean;
+  closeCashModalInstanceKey: number;
+  canEditOpeningBalance: boolean;
   closeCloseCashModal: () => void;
   isLoadingCashSummary: boolean;
-  cashSummaryPayload: {
-    sessionIdentifier: string;
-    sessionType: string;
-    openingBalance: number;
-    expensesTotal: number;
-    cashSalesTotal: number;
-    expectedCashBalance: number;
-  } | null;
+  cashSummaryPayload: OperatorCloseCashSummaryPayload | null;
   openingBalanceCashInput: string;
   setOpeningBalanceCashInput: Dispatch<SetStateAction<string>>;
   expensesCashInput: string;
@@ -192,6 +189,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     saleNotesInput,
     setSaleNotesInput,
     isStockToolsModalOpen,
+    stockToolsModalInstanceKey,
     stockToolsModalBackdropVisible,
     closeStockToolsModal,
     closeStockToolsModalImmediately,
@@ -202,6 +200,8 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
     setIsCreateProductModalOpen,
     loadProductsCatalog,
     isCloseCashModalOpen,
+    closeCashModalInstanceKey,
+    canEditOpeningBalance,
     closeCloseCashModal,
     isLoadingCashSummary,
     cashSummaryPayload,
@@ -320,6 +320,7 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
       ) : null}
 
       <StockToolsModal
+        key={`stock-tools-${stockToolsModalInstanceKey}`}
         isOpen={isStockToolsModalOpen}
         stockToolsModalBackdropVisible={stockToolsModalBackdropVisible}
         onClose={closeStockToolsModal}
@@ -346,8 +347,10 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
       />
 
       <CloseCashModal
+        key={`close-cash-${closeCashModalInstanceKey}`}
         isOpen={isCloseCashModalOpen}
         onClose={closeCloseCashModal}
+        canEditOpeningBalance={canEditOpeningBalance}
         isLoadingCashSummary={isLoadingCashSummary}
         cashSummaryPayload={cashSummaryPayload}
         openingBalanceCashInput={openingBalanceCashInput}
