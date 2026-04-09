@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, Store } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import {
   parseImplicitGrantParametersFromHash,
@@ -45,6 +52,14 @@ const LoginPage = (): ReactElement => {
   const [pageSuccessMessage, setPageSuccessMessage] = useState<string>("");
   const [businessName, setBusinessName] = useState<string>(DEFAULT_BUSINESS_NAME);
   const [businessLogoUrl, setBusinessLogoUrl] = useState<string | null>(null);
+  const [isRedirectingToReset, setIsRedirectingToReset] =
+    useState<boolean>(false);
+
+  useLayoutEffect(() => {
+    if (parseImplicitGrantParametersFromHash(window.location.hash) !== null) {
+      setIsRedirectingToReset(true);
+    }
+  }, []);
 
   useEffect(() => {
     const cachedName = window.localStorage.getItem(CACHED_BUSINESS_NAME_KEY);
@@ -77,6 +92,7 @@ const LoginPage = (): ReactElement => {
     }
 
     if (implicitParameters !== null) {
+      setIsRedirectingToReset(true);
       console.log(
         "🛠️ Auth: Detectado hash de recuperación en login, aplicando fallback de sesión...",
       );
@@ -90,6 +106,7 @@ const LoginPage = (): ReactElement => {
             "🛠️ Auth: Fallback en login falló al establecer sesión.",
             setSessionError.message,
           );
+          setIsRedirectingToReset(false);
           return;
         }
         const pathWithoutHash =
@@ -105,6 +122,7 @@ const LoginPage = (): ReactElement => {
           console.log(
             "🛠️ Auth: Fallback en login no logró resolver usuario.",
           );
+          setIsRedirectingToReset(false);
           return;
         }
         console.log(
@@ -227,6 +245,34 @@ const LoginPage = (): ReactElement => {
     } finally {
       setIsSendingResetPasswordEmail(false);
     }
+  }
+
+  if (isRedirectingToReset) {
+    return (
+      <main
+        className="flex min-h-screen items-center justify-center px-4 py-8"
+        style={{ backgroundColor: "lab(94 0 -0.01)" }}
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label="Procesando acceso seguro"
+      >
+        <section className="flex w-full max-w-md flex-col items-center gap-6 rounded-[2.5rem] border border-blue-300/30 bg-blue-950 px-10 py-14 shadow-2xl backdrop-blur-xl dark:border-blue-400/20">
+          <Loader2
+            className="size-12 animate-spin text-emerald-400"
+            aria-hidden
+          />
+          <div className="text-center">
+            <p className="text-base font-semibold text-white">
+              Procesando acceso seguro…
+            </p>
+            <p className="mt-2 text-sm text-blue-100/80">
+              Te llevamos al cambio de contraseña. No cierres esta ventana.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (
