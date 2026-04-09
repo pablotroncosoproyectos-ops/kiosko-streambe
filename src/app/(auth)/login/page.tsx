@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Eye, EyeOff, Lock, Mail, Store } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import {
+  parseImplicitGrantParametersFromHash,
+  waitForSupabaseAuthenticatedUser,
+} from "@/lib/authImplicitSessionFromUrl";
 
 import {
   CACHED_BUSINESS_LOGO_KEY,
@@ -64,9 +68,51 @@ const LoginPage = (): ReactElement => {
     const authorizationCode = currentUrl.searchParams.get("code");
     const authType = currentUrl.searchParams.get("type");
     const messageFromQuery = currentUrl.searchParams.get("message");
+    const implicitParameters = parseImplicitGrantParametersFromHash(
+      window.location.hash,
+    );
 
     if (messageFromQuery && messageFromQuery.trim().length > 0) {
       setPageSuccessMessage(messageFromQuery);
+    }
+
+    if (implicitParameters !== null) {
+      console.log(
+        "🛠️ Auth: Detectado hash de recuperación en login, aplicando fallback de sesión...",
+      );
+      void (async () => {
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: implicitParameters.access_token,
+          refresh_token: implicitParameters.refresh_token,
+        });
+        if (setSessionError) {
+          console.log(
+            "🛠️ Auth: Fallback en login falló al establecer sesión.",
+            setSessionError.message,
+          );
+          return;
+        }
+        const pathWithoutHash =
+          window.location.pathname +
+          (window.location.search.length > 0 ? window.location.search : "");
+        window.history.replaceState(
+          window.history.state,
+          "",
+          pathWithoutHash,
+        );
+        const hasUser = await waitForSupabaseAuthenticatedUser(supabase);
+        if (!hasUser) {
+          console.log(
+            "🛠️ Auth: Fallback en login no logró resolver usuario.",
+          );
+          return;
+        }
+        console.log(
+          "🛠️ Auth: Fallback en login resolvió sesión, redirigiendo a /auth/reset-password.",
+        );
+        router.replace("/auth/reset-password");
+      })();
+      return;
     }
 
     if (authorizationCode && authorizationCode.trim().length > 0) {
@@ -74,6 +120,9 @@ const LoginPage = (): ReactElement => {
       currentUrl.searchParams.forEach((value, key) => {
         callbackUrl.searchParams.set(key, value);
       });
+      console.log(
+        "🛠️ Auth: Detectado code en login, redirigiendo a /auth/callback...",
+      );
       window.location.replace(callbackUrl.toString());
       return;
     }
@@ -166,7 +215,7 @@ const LoginPage = (): ReactElement => {
     setIsSendingResetPasswordEmail(true);
     try {
       await supabase.auth.resetPasswordForEmail(normalizedResetEmailAddress, {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/auth/reset-password")}`,
       });
       setResetPasswordFeedbackMessage(
         "Si el correo existe, recibirás un enlace de recuperación.",

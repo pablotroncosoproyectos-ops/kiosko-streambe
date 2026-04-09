@@ -6,6 +6,8 @@ export type DashboardUserRole = "ADMIN" | "OPERATOR" | null;
 
 export interface DashboardSessionState {
   userRole: DashboardUserRole;
+  /** Identificador del usuario autenticado (`public.users.id` / Auth). Vacío hasta completar `/api/auth/me`. */
+  userIdentifier: string;
   /** Viene del API: true para ADMIN; OPERADOR solo si `can_view_sales_history` en BD. */
   canViewSalesHistory: boolean;
   isProfileReady: boolean;

@@ -4,11 +4,11 @@ import {
   useCallback,
   useEffect,
   useId,
+  useRef,
   useState,
   type ReactElement,
 } from "react";
 import { KeyRound, Loader2, Pencil, UserPlus, Users, X } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { CreateUserModal } from "@/components/admin/CreateUserModal";
 
 const MODAL_CLOSE_BUTTON_CLASS =
@@ -33,6 +33,14 @@ const TABLE_ROW_CLASS =
 
 const TABLE_HEAD_ROW_CLASS =
   "border-b border-zinc-200 bg-transparent dark:border-zinc-700";
+
+const PASSWORD_RESET_COOLDOWN_MS = 60_000;
+
+const PASSWORD_RESET_SUCCESS_ALERT =
+  "Correo de recuperación enviado con éxito.";
+
+const PASSWORD_RESET_RATE_LIMIT_ALERT =
+  "Límite alcanzado. Por seguridad de Supabase, esperá 1 minuto antes de reintentar.";
 
 export interface ManagedUserListRow {
   id: string;
@@ -118,6 +126,11 @@ export function UserManagementModal({
   currentAdministratorUserIdentifier,
 }: UserManagementModalProperties): ReactElement | null {
   const titleHeadingId = useId();
+  const isPasswordResetFetchInProgressReference = useRef<boolean>(false);
+  const [passwordResetCooldownEndsAtByUserId, setPasswordResetCooldownEndsAtByUserId] =
+    useState<Record<string, number>>({});
+  const [passwordResetCooldownRenderTick, setPasswordResetCooldownRenderTick] =
+    useState<number>(0);
   const [userRows, setUserRows] = useState<ManagedUserListRow[]>([]);
   const [isLoadingUserList, setIsLoadingUserList] = useState<boolean>(false);
   const [listErrorMessage, setListErrorMessage] = useState<string>("");
@@ -168,10 +181,40 @@ export function UserManagementModal({
       setEditingUserIdentifier(null);
       setListErrorMessage("");
       setIsCreateUserModalOpen(false);
+      setPasswordResetCooldownEndsAtByUserId({});
+      setPasswordResetCooldownRenderTick(0);
+      isPasswordResetFetchInProgressReference.current = false;
       return;
     }
     void loadUserListFromServer();
   }, [isOpen, loadUserListFromServer]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const hasActiveCooldown = Object.values(
+      passwordResetCooldownEndsAtByUserId,
+    ).some((endsAt) => endsAt > Date.now());
+    if (!hasActiveCooldown) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setPasswordResetCooldownRenderTick((previousTick) => previousTick + 1);
+      setPasswordResetCooldownEndsAtByUserId((previous) => {
+        const next = { ...previous };
+        let mutated = false;
+        for (const key of Object.keys(next)) {
+          if (next[key] <= Date.now()) {
+            delete next[key];
+            mutated = true;
+          }
+        }
+        return mutated ? next : previous;
+      });
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, passwordResetCooldownEndsAtByUserId]);
 
   function beginEditUser(userRow: ManagedUserListRow): void {
     setEditingUserIdentifier(userRow.id);
@@ -231,36 +274,69 @@ export function UserManagementModal({
   ]);
 
   const sendPasswordResetEmail = useCallback(
-    async (emailAddress: string, userIdentifier: string): Promise<void> => {
+    async (userIdentifier: string): Promise<void> => {
+      if (isPasswordResetFetchInProgressReference.current) {
+        return;
+      }
+      const cooldownEndsAt =
+        passwordResetCooldownEndsAtByUserId[userIdentifier] ?? 0;
+      if (cooldownEndsAt > Date.now()) {
+        return;
+      }
+
+      isPasswordResetFetchInProgressReference.current = true;
       setResetPasswordUserIdentifier(userIdentifier);
       setListErrorMessage("");
       try {
-        const supabaseBrowserClient = createSupabaseBrowserClient();
-        const origin =
-          typeof window !== "undefined" ? window.location.origin : "";
-        const { error: resetError } =
-          await supabaseBrowserClient.auth.resetPasswordForEmail(
-            emailAddress,
-            {
-              redirectTo: `${origin}/login`,
-            },
-          );
-        if (resetError) {
+        const response = await fetch(
+          `/api/users/${encodeURIComponent(userIdentifier)}/send-password-recovery`,
+          {
+            method: "POST",
+            credentials: "include",
+          },
+        );
+
+        let responseBody: { message?: string } = {};
+        try {
+          responseBody = (await response.json()) as { message?: string };
+        } catch {
+          responseBody = {};
+        }
+
+        if (response.status === 401) {
+          window.location.assign("/login");
+          return;
+        }
+
+        if (response.status === 429) {
+          setPasswordResetCooldownEndsAtByUserId((previous) => ({
+            ...previous,
+            [userIdentifier]: Date.now() + PASSWORD_RESET_COOLDOWN_MS,
+          }));
           setListErrorMessage(
-            resetError.message || "No se pudo enviar el correo de recuperación",
+            responseBody.message ?? PASSWORD_RESET_RATE_LIMIT_ALERT,
           );
           return;
         }
+
+        if (!response.ok) {
+          setListErrorMessage(
+            responseBody.message ?? "No se pudo enviar el correo de recuperación",
+          );
+          return;
+        }
+
         window.alert(
-          "Se envió un correo con el enlace para restablecer la contraseña.",
+          responseBody.message ?? PASSWORD_RESET_SUCCESS_ALERT,
         );
       } catch {
         setListErrorMessage("No se pudo enviar el correo de recuperación");
       } finally {
+        isPasswordResetFetchInProgressReference.current = false;
         setResetPasswordUserIdentifier(null);
       }
     },
-    [],
+    [passwordResetCooldownEndsAtByUserId],
   );
 
   if (!isOpen) {
@@ -370,6 +446,27 @@ export function UserManagementModal({
                         editingUserIdentifier === userRow.id;
                       const isCurrentAdministrator =
                         userRow.id === currentAdministratorUserIdentifier;
+                      const passwordResetCooldownUiTick =
+                        passwordResetCooldownRenderTick;
+                      const passwordResetCooldownNowMs =
+                        Date.now() + passwordResetCooldownUiTick * 0;
+                      const passwordResetCooldownEndsAt =
+                        passwordResetCooldownEndsAtByUserId[userRow.id] ?? 0;
+                      const isPasswordResetCooldownActive =
+                        passwordResetCooldownEndsAt > passwordResetCooldownNowMs;
+                      const passwordResetCooldownSecondsRemaining =
+                        isPasswordResetCooldownActive
+                          ? Math.max(
+                              1,
+                              Math.ceil(
+                                (passwordResetCooldownEndsAt -
+                                  passwordResetCooldownNowMs) /
+                                  1000,
+                              ),
+                            )
+                          : 0;
+                      const isPasswordResetRequestInProgressForRow =
+                        resetPasswordUserIdentifier === userRow.id;
 
                       return (
                         <tr
@@ -495,24 +592,39 @@ export function UserManagementModal({
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    void sendPasswordResetEmail(
-                                      userRow.email,
-                                      userRow.id,
-                                    )
+                                    void sendPasswordResetEmail(userRow.id)
                                   }
                                   disabled={
-                                    resetPasswordUserIdentifier === userRow.id
+                                    isPasswordResetRequestInProgressForRow ||
+                                    isPasswordResetCooldownActive
                                   }
-                                  title="Enviar correo de recuperación de contraseña"
+                                  aria-busy={isPasswordResetRequestInProgressForRow}
+                                  title={
+                                    isPasswordResetCooldownActive
+                                      ? `${PASSWORD_RESET_RATE_LIMIT_ALERT} (${passwordResetCooldownSecondsRemaining}s)`
+                                      : "Enviar correo de recuperación de contraseña"
+                                  }
                                   className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
                                 >
-                                  {resetPasswordUserIdentifier ===
-                                  userRow.id ? (
-                                    <Loader2 className="size-3.5 animate-spin" />
+                                  {isPasswordResetRequestInProgressForRow ? (
+                                    <>
+                                      <Loader2
+                                        className="size-3.5 shrink-0 animate-spin"
+                                        aria-hidden
+                                      />
+                                      Cargando…
+                                    </>
+                                  ) : isPasswordResetCooldownActive ? (
+                                    <>
+                                      <KeyRound className="size-3.5 shrink-0" />
+                                      Esperá {passwordResetCooldownSecondsRemaining}s
+                                    </>
                                   ) : (
-                                    <KeyRound className="size-3.5" />
+                                    <>
+                                      <KeyRound className="size-3.5 shrink-0" />
+                                      Reset
+                                    </>
                                   )}
-                                  Reset
                                 </button>
                                 <button
                                   type="button"

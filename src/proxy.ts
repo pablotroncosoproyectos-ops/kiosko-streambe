@@ -4,6 +4,7 @@ import { readMustChangePasswordFromUserMetadata } from '@/lib/authUserMetadata'
 
 const MANDATORY_PASSWORD_CHANGE_PATHNAME = '/auth/cambiar-contrasena-obligatoria'
 const AUTH_CALLBACK_PATHNAME = '/auth/callback'
+const PASSWORD_RESET_PATHNAME = '/auth/reset-password'
 
 /**
  * Proxy de Control de Acceso y Sesión (RBAC) - Actualizado para Next.js 16
@@ -63,8 +64,13 @@ export async function proxy(request: NextRequest) {
 
   const mustChangePassword = readMustChangePasswordFromUserMetadata(user)
 
-  // 2. Sin sesión: solo login
-  if (!user && pathname !== '/login' && pathname !== AUTH_CALLBACK_PATHNAME) {
+  // 2. Sin sesión: rutas públicas de autenticación (callback PKCE, reset con hash en cliente)
+  const isPublicPathWithoutSession =
+    pathname === '/login' ||
+    pathname === AUTH_CALLBACK_PATHNAME ||
+    pathname === PASSWORD_RESET_PATHNAME
+
+  if (!user && !isPublicPathWithoutSession) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

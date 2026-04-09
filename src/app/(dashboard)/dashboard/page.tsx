@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import {
   BarChart3,
@@ -30,7 +31,15 @@ import {
 } from "recharts";
 
 import { formatArgentinaPesos } from "@/lib/currencyFormat";
-import { UserManagementModal } from "@/components/admin/UserManagementModal";
+import { useDashboardSession } from "@/components/layout/dashboard-session-context";
+
+const UserManagementModal = dynamic(
+  () =>
+    import("@/components/admin/UserManagementModal").then((mod) => ({
+      default: mod.UserManagementModal,
+    })),
+  { ssr: false, loading: () => null },
+);
 import { InventoryMovementTypeBadge } from "@/components/inventory/InventoryMovementTypeBadge";
 import { DailyClosurePrintReceipt } from "./DailyClosurePrintReceipt";
 import { getCurrentBuenosAiresCalendarDateYyyyMmDd } from "@/lib/buenosAiresReportingCalendar";
@@ -57,14 +66,6 @@ interface DailyClosureApiResponse {
 
 interface InventoryMovementsApiResponse {
   recentInventoryMovements?: InventoryMovementReportRow[];
-  message?: string;
-}
-
-interface AuthMeApiResponse {
-  userProfile?: {
-    id: string;
-    role: string;
-  };
   message?: string;
 }
 
@@ -209,6 +210,7 @@ function resolveDominantPaymentMethodSummary(
 }
 
 const ReportsDashboardPage = (): ReactElement => {
+  const { userIdentifier } = useDashboardSession();
   const [selectedReportCalendarDate, setSelectedReportCalendarDate] =
     useState<string>(() => getCurrentBuenosAiresCalendarDateYyyyMmDd());
   const [dailyClosureReportMetrics, setDailyClosureReportMetrics] =
@@ -233,13 +235,6 @@ const ReportsDashboardPage = (): ReactElement => {
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState<boolean>(false);
   const [isUsersManagementPanelOpen, setIsUsersManagementPanelOpen] =
     useState<boolean>(false);
-  const [authenticatedUserIdentifier, setAuthenticatedUserIdentifier] =
-    useState<string>("");
-  const [authenticatedUserRole, setAuthenticatedUserRole] = useState<
-    string | null
-  >(null);
-  const [isAuthProfileLoading, setIsAuthProfileLoading] =
-    useState<boolean>(true);
   const [isLoadingViewSummaryData, setIsLoadingViewSummaryData] =
     useState<boolean>(true);
   const [isLoadingDailyClosureReport, setIsLoadingDailyClosureReport] =
@@ -410,38 +405,6 @@ const ReportsDashboardPage = (): ReactElement => {
   useEffect(() => {
     void loadInventoryMovementsFromServer();
   }, [loadInventoryMovementsFromServer]);
-
-  const loadAuthenticatedProfileFromServer =
-    useCallback(async (): Promise<void> => {
-      setIsAuthProfileLoading(true);
-      try {
-        const response = await fetch("/api/auth/me", {
-          method: "GET",
-          credentials: "include",
-        });
-        const responseBody = (await response.json()) as AuthMeApiResponse;
-        if (response.status === 401) {
-          window.location.assign("/login");
-          return;
-        }
-        if (!response.ok || !responseBody.userProfile) {
-          setAuthenticatedUserRole(null);
-          setAuthenticatedUserIdentifier("");
-          return;
-        }
-        setAuthenticatedUserIdentifier(responseBody.userProfile.id);
-        setAuthenticatedUserRole(responseBody.userProfile.role);
-      } catch {
-        setAuthenticatedUserRole(null);
-        setAuthenticatedUserIdentifier("");
-      } finally {
-        setIsAuthProfileLoading(false);
-      }
-    }, []);
-
-  useEffect(() => {
-    void loadAuthenticatedProfileFromServer();
-  }, [loadAuthenticatedProfileFromServer]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -765,7 +728,7 @@ const ReportsDashboardPage = (): ReactElement => {
             </p>
           ) : null}
 
-          <div className="pt-8">
+          <div className="pt-2">
             <section className="grid w-full grid-cols-1 gap-6 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
             <button
               type="button"
@@ -855,35 +818,31 @@ const ReportsDashboardPage = (): ReactElement => {
               </p>
             </button>
 
-            {isAuthProfileLoading ? (
-              <div
-                className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} animate-pulse cursor-default border-zinc-200/90 dark:border-zinc-800`}
-                aria-busy="true"
-                aria-label="Cargando tarjeta de usuarios"
-              >
-                <div className="size-16 shrink-0 rounded-2xl bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-7 w-28 rounded-lg bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-4 w-full max-w-[220px] rounded bg-zinc-200 dark:bg-zinc-700" />
-                <div className="h-3 w-full max-w-[180px] rounded bg-zinc-200/80 dark:bg-zinc-600/80" />
-              </div>
-            ) : authenticatedUserRole === "ADMIN" ? (
-              <button
-                type="button"
-                onClick={() => setIsUsersManagementPanelOpen(true)}
-                className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-violet-400 dark:hover:border-violet-500`}
-              >
-                <Users
-                  className="size-16 shrink-0 text-violet-600 dark:text-violet-500"
-                  aria-hidden
-                />
-                <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  Usuarios
-                </span>
-                <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
-                  Roles, estado y permisos del equipo.
-                </p>
-              </button>
-            ) : null}
+            {/*
+              Ruta `/dashboard` restringida a ADMIN en proxy (RBAC). El perfil y el id
+              vienen de `DashboardShell` vía `useDashboardSession` (un solo GET /api/auth/me).
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                if (userIdentifier.length === 0) {
+                  return;
+                }
+                setIsUsersManagementPanelOpen(true);
+              }}
+              className={`${REPORTS_LAUNCHER_CARD_BASE_CLASS} ${REPORTS_LAUNCHER_CARD_HOVER_CLASS} hover:border-violet-400 dark:hover:border-violet-500`}
+            >
+              <Users
+                className="size-16 shrink-0 text-violet-600 dark:text-violet-500"
+                aria-hidden
+              />
+              <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                Usuarios
+              </span>
+              <p className="max-w-xs px-2 text-sm text-zinc-500 dark:text-zinc-400">
+                Roles, estado y permisos del equipo.
+              </p>
+            </button>
           </section>
           </div>
         </div>
@@ -1170,12 +1129,11 @@ const ReportsDashboardPage = (): ReactElement => {
           )
         : null}
 
-      {authenticatedUserRole === "ADMIN" &&
-      authenticatedUserIdentifier.length > 0 ? (
+      {userIdentifier.length > 0 ? (
         <UserManagementModal
           isOpen={isUsersManagementPanelOpen}
           onClose={() => setIsUsersManagementPanelOpen(false)}
-          currentAdministratorUserIdentifier={authenticatedUserIdentifier}
+          currentAdministratorUserIdentifier={userIdentifier}
         />
       ) : null}
 

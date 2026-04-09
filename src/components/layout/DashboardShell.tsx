@@ -24,9 +24,11 @@ import {
   DashboardSessionProvider,
 } from "@/components/layout/dashboard-session-context";
 import { BusinessSettingsModal } from "@/components/business/BusinessSettingsModal";
+import { CurrentDateTime } from "@/components/layout/CurrentDateTime";
 
 interface MeApiResponse {
   userProfile?: {
+    id: string;
     fullName: string;
     role: "ADMIN" | "OPERATOR" | string;
     canViewSalesHistory?: boolean;
@@ -58,22 +60,12 @@ const OPERATOR_NAV_ITEMS: DashboardNavItem[] = [
   { href: "/operador", label: "Punto de venta", icon: ShoppingCart },
 ];
 
-function formatArgentinaDateTimeMedium(date: Date): string {
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(date);
-}
-
 export function DashboardShell({
   children,
 }: Readonly<{ children: ReactNode }>): ReactElement {
   const pathname = usePathname();
-  const [hasClientMounted, setHasClientMounted] = useState<boolean>(false);
-  const [argentinaDateTimeDisplay, setArgentinaDateTimeDisplay] =
-    useState<string>("");
   const [userFullName, setUserFullName] = useState<string>("");
+  const [userIdentifier, setUserIdentifier] = useState<string>("");
   const [userRole, setUserRole] = useState<"ADMIN" | "OPERATOR" | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] =
     useState<boolean>(false);
@@ -109,6 +101,11 @@ export function DashboardShell({
         return;
       }
       if (response.ok && responseBody.userProfile) {
+        const nextIdentifier =
+          typeof responseBody.userProfile.id === "string"
+            ? responseBody.userProfile.id.trim()
+            : "";
+        setUserIdentifier(nextIdentifier);
         setUserFullName(responseBody.userProfile.fullName);
         const role = responseBody.userProfile.role;
         if (role === "ADMIN" || role === "OPERATOR") {
@@ -120,10 +117,12 @@ export function DashboardShell({
           Boolean(responseBody.userProfile.canViewSalesHistory),
         );
       } else {
+        setUserIdentifier("");
         setUserRole(null);
         setCanViewSalesHistory(false);
       }
     } catch {
+      setUserIdentifier("");
       setUserRole(null);
       setCanViewSalesHistory(false);
     } finally {
@@ -132,20 +131,8 @@ export function DashboardShell({
   }, []);
 
   useEffect(() => {
-    setHasClientMounted(true);
-  }, []);
-
-  useEffect(() => {
     void loadUserProfile();
   }, [loadUserProfile]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setArgentinaDateTimeDisplay(formatArgentinaDateTimeMedium(new Date()));
-    }, 1000);
-    setArgentinaDateTimeDisplay(formatArgentinaDateTimeMedium(new Date()));
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   useEffect(() => {
     async function loadBusinessSettings(): Promise<void> {
@@ -184,10 +171,11 @@ export function DashboardShell({
   const dashboardSessionValue = useMemo(
     () => ({
       userRole,
+      userIdentifier,
       canViewSalesHistory,
       isProfileReady: isProfileRequestCompleted,
     }),
-    [canViewSalesHistory, isProfileRequestCompleted, userRole],
+    [canViewSalesHistory, isProfileRequestCompleted, userIdentifier, userRole],
   );
 
   return (
@@ -318,17 +306,7 @@ export function DashboardShell({
             >
               <Menu className="size-5" />
             </button>
-            <div className="ml-auto min-w-0 text-right md:ml-0 md:text-left">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                Argentina (BA)
-              </p>
-              <p
-                className="truncate text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100"
-                suppressHydrationWarning
-              >
-                {hasClientMounted ? argentinaDateTimeDisplay : "—"}
-              </p>
-            </div>
+            <CurrentDateTime />
           </div>
 
           <div className="hidden flex-wrap items-center justify-end gap-2 sm:gap-3 md:flex">

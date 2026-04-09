@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, KeyRound } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { MUST_CHANGE_PASSWORD_USER_METADATA_KEY } from "@/lib/authUserMetadata";
+import {
+  parseImplicitGrantParametersFromHash,
+  waitForSupabaseAuthenticatedUser,
+} from "@/lib/authImplicitSessionFromUrl";
 
 const MINIMUM_PASSWORD_LENGTH = 8;
 
@@ -24,8 +28,33 @@ export default function ResetPasswordPage(): ReactElement {
     void (async () => {
       setIsCheckingSession(true);
       try {
-        const { data, error } = await supabase.auth.getUser();
-        if (error || !data.user) {
+        const implicitParameters = parseImplicitGrantParametersFromHash(
+          window.location.hash,
+        );
+        if (implicitParameters !== null) {
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: implicitParameters.access_token,
+            refresh_token: implicitParameters.refresh_token,
+          });
+          if (setSessionError) {
+            router.replace("/login");
+            return;
+          }
+          const pathWithoutHash =
+            window.location.pathname +
+            (window.location.search.length > 0 ? window.location.search : "");
+          window.history.replaceState(
+            window.history.state,
+            "",
+            pathWithoutHash,
+          );
+        }
+
+        await supabase.auth.getSession();
+
+        const hasAuthenticatedUser =
+          await waitForSupabaseAuthenticatedUser(supabase);
+        if (!hasAuthenticatedUser) {
           router.replace("/login");
           return;
         }

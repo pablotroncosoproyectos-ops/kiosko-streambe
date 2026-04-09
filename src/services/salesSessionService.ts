@@ -312,6 +312,14 @@ export interface SalesByPaymentMethodBreakdown {
   qr: number;
 }
 
+/** Datos de la fila `sales_sessions` abierta (VENTA_LIBRE), sin leer `sales`. */
+export interface OpenSessionBasicsPayload {
+  sessionIdentifier: string;
+  sessionType: string;
+  openingBalance: number;
+  expensesTotal: number;
+}
+
 export interface OpenSessionCashSummaryPayload {
   sessionIdentifier: string;
   sessionType: string;
@@ -527,13 +535,12 @@ async function closeOpenRecreoSessionsForOperator(
 }
 
 /**
- * Sesión de caja del turno (VENTA_LIBRE abierta): una sola por kiosco, compartida entre
- * ADMIN y OPERATOR. No filtra por `user_id` (quien abrió queda en la fila para auditoría).
- * `expectedCashBalance` = opening_balance + ventas en efectivo (tabla `sales`, session_id de esta sesión) - expenses_total.
+ * Sesión VENTA_LIBRE abierta: solo lectura de `sales_sessions` (sin tabla `sales`).
+ * Útil para habilitar el Punto de venta sin calcular arqueo.
  */
-export async function getOpenSessionCashSummaryForOperator(
+export async function getOpenSessionBasicsForOperator(
   supabaseClient: SupabaseClient,
-): Promise<OpenSessionCashSummaryPayload | null> {
+): Promise<OpenSessionBasicsPayload | null> {
   const ventaLibreType = normalizeSessionTypeForDatabase(VENTA_LIBRE_SESSION_TYPE);
   const openStatus = normalizeSessionStatusForDatabase(OPEN_SESSION_STATUS);
 
@@ -554,9 +561,29 @@ export async function getOpenSessionCashSummaryForOperator(
     return null;
   }
 
-  const sessionIdentifier = openSessionRow.id;
-  const openingBalance = parseNumericRowValue(openSessionRow.opening_balance) ?? 0;
-  const expensesTotal = parseNumericRowValue(openSessionRow.expenses_total) ?? 0;
+  return {
+    sessionIdentifier: openSessionRow.id,
+    sessionType:
+      typeof openSessionRow.session_type === "string"
+        ? openSessionRow.session_type.trim().toUpperCase()
+        : "",
+    openingBalance: parseNumericRowValue(openSessionRow.opening_balance) ?? 0,
+    expensesTotal: parseNumericRowValue(openSessionRow.expenses_total) ?? 0,
+  };
+}
+
+/**
+ * Sesión de caja del turno (VENTA_LIBRE abierta): una sola por kiosco, compartida entre
+ * ADMIN y OPERATOR. No filtra por `user_id` (quien abrió queda en la fila para auditoría).
+ * `expectedCashBalance` = opening_balance + ventas en efectivo (tabla `sales`, session_id de esta sesión) - expenses_total.
+ */
+export async function getOpenSessionCashSummaryForOperator(
+  supabaseClient: SupabaseClient,
+): Promise<OpenSessionCashSummaryPayload | null> {
+  const basics = await getOpenSessionBasicsForOperator(supabaseClient);
+  if (basics === null) {
+    return null;
+  }
 
   const {
     cashSalesVentaLibreTotal,
@@ -567,19 +594,17 @@ export async function getOpenSessionCashSummaryForOperator(
     recreoSalesByPaymentMethod,
   } = await computeArqueoSalesForOpenVentaLibreSession(
     supabaseClient,
-    sessionIdentifier,
+    basics.sessionIdentifier,
   );
 
-  const expectedCashBalance = openingBalance + cashSalesTotal - expensesTotal;
+  const expectedCashBalance =
+    basics.openingBalance + cashSalesTotal - basics.expensesTotal;
 
   return {
-    sessionIdentifier,
-    sessionType:
-      typeof openSessionRow.session_type === "string"
-        ? openSessionRow.session_type.trim().toUpperCase()
-        : "",
-    openingBalance,
-    expensesTotal,
+    sessionIdentifier: basics.sessionIdentifier,
+    sessionType: basics.sessionType,
+    openingBalance: basics.openingBalance,
+    expensesTotal: basics.expensesTotal,
     cashSalesTotal,
     cashSalesVentaLibreTotal,
     cashSalesRecreoTotal,

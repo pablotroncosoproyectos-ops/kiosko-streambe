@@ -1,8 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
-import { BarcodeCameraScanner } from "@/components/admin/BarcodeCameraScanner";
-import { ProductFormModal } from "@/components/admin/ProductFormModal";
 import type { Product } from "@/types/database";
 import type {
   CartItem,
@@ -12,13 +11,68 @@ import type {
   SaleHistoryTab,
   SelectedPaymentMethod,
 } from "../types";
-import { CloseCashModal } from "./CloseCashModal";
-import { LowStockDetailModal } from "./LowStockDetailModal";
-import { QuickLoadModal } from "./QuickLoadModal";
-import { RecreoModal } from "./RecreoModal";
-import { SaleModal } from "./SaleModal";
-import { StockAdjustmentModal } from "./StockAdjustmentModal";
-import { StockToolsModal } from "./StockToolsModal";
+
+const SaleModal = dynamic(
+  () => import("./SaleModal").then((mod) => ({ default: mod.SaleModal })),
+  { ssr: false, loading: () => null },
+);
+
+const RecreoModal = dynamic(
+  () => import("./RecreoModal").then((mod) => ({ default: mod.RecreoModal })),
+  { ssr: false, loading: () => null },
+);
+
+const QuickLoadModal = dynamic(
+  () =>
+    import("./QuickLoadModal").then((mod) => ({ default: mod.QuickLoadModal })),
+  { ssr: false, loading: () => null },
+);
+
+const StockToolsModal = dynamic(
+  () =>
+    import("./StockToolsModal").then((mod) => ({
+      default: mod.StockToolsModal,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const ProductFormModal = dynamic(
+  () =>
+    import("@/components/admin/ProductFormModal").then((mod) => ({
+      default: mod.ProductFormModal,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const CloseCashModal = dynamic(
+  () =>
+    import("./CloseCashModal").then((mod) => ({ default: mod.CloseCashModal })),
+  { ssr: false, loading: () => null },
+);
+
+const StockAdjustmentModal = dynamic(
+  () =>
+    import("./StockAdjustmentModal").then((mod) => ({
+      default: mod.StockAdjustmentModal,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const LowStockDetailModal = dynamic(
+  () =>
+    import("./LowStockDetailModal").then((mod) => ({
+      default: mod.LowStockDetailModal,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const BarcodeCameraScanner = dynamic(
+  () =>
+    import("@/components/admin/BarcodeCameraScanner").then((mod) => ({
+      default: mod.BarcodeCameraScanner,
+    })),
+  { ssr: false, loading: () => null },
+);
 
 export interface ModalsContainerProps {
   isSaleModalOpen: boolean;
@@ -287,7 +341,6 @@ export function ModalsContainer(props: ModalsContainerProps): ReactElement {
 
       {isQuickLoadModalOpen ? (
         <QuickLoadModal
-          isBreakActive={isBreakActive}
           quickLoadModalBackdropVisible={quickLoadModalBackdropVisible}
           onClose={closeQuickLoadModal}
           catalogBrowseMode={catalogBrowseMode}

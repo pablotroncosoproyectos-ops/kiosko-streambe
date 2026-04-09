@@ -48,7 +48,15 @@ export type CatalogBrowseMode = "categories" | "search";
 export type SaleHistoryTab = "ventaLibre" | "recreo" | "ventaTotal";
 export type OperatorCashSessionState = "loading" | "noSession" | "hasSession";
 
-/** Alineado con `OpenSessionCashSummaryPayload` del API GET /api/sales-sessions/cash-summary */
+/** Respuesta ligera GET /api/sales-sessions/cash-summary (sin includeArqueo). Sin datos de `sales`. */
+export interface OperatorOpenSessionBasicsPayload {
+  sessionIdentifier: string;
+  sessionType: string;
+  openingBalance: number;
+  expensesTotal: number;
+}
+
+/** Alineado con `OpenSessionCashSummaryPayload` del API GET /api/sales-sessions/cash-summary?includeArqueo=true */
 export interface OperatorCloseCashSummaryPayload {
   sessionIdentifier: string;
   sessionType: string;

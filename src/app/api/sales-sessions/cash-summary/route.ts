@@ -1,20 +1,33 @@
 import { NextResponse } from "next/server";
 import { requireAuthenticatedAuthorizedSupabaseClient } from "@/lib/supabase-server-route";
-import { getOpenSessionCashSummaryForOperator } from "@/services/salesSessionService";
+import {
+  getOpenSessionBasicsForOperator,
+  getOpenSessionCashSummaryForOperator,
+} from "@/services/salesSessionService";
 
-export async function GET(): Promise<NextResponse> {
+/**
+ * Sin `includeArqueo=true`: solo confirma sesión VENTA_LIBRE abierta (tabla `sales_sessions`).
+ * Con `includeArqueo=true`: incluye agregados desde `sales` (modal Cerrar caja).
+ */
+export async function GET(request: Request): Promise<NextResponse> {
   try {
     const supabaseServerClient =
       await requireAuthenticatedAuthorizedSupabaseClient(["ADMIN", "OPERATOR"]);
 
-    const summary = await getOpenSessionCashSummaryForOperator(
+    const includeArqueo =
+      new URL(request.url).searchParams.get("includeArqueo") === "true";
+
+    if (includeArqueo) {
+      const summary = await getOpenSessionCashSummaryForOperator(
+        supabaseServerClient,
+      );
+      return NextResponse.json({ cashSummary: summary }, { status: 200 });
+    }
+
+    const openSession = await getOpenSessionBasicsForOperator(
       supabaseServerClient,
     );
-
-    return NextResponse.json(
-      { cashSummary: summary },
-      { status: 200 },
-    );
+    return NextResponse.json({ openSession }, { status: 200 });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "Authentication required") {
       return NextResponse.json(

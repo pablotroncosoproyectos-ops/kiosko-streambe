@@ -11,6 +11,7 @@ import {
 import type { ReactElement } from "react";
 import { useDashboardSession } from "@/components/layout/dashboard-session-context";
 import { ModalsContainer } from "./components/ModalsContainer";
+import { OperadorSessionGridSkeleton } from "./components/OperadorSessionGridSkeleton";
 import { useOperadorDashboard } from "./useOperadorDashboard";
 
 // Constantes de estilo unificadas
@@ -39,9 +40,7 @@ const OperadorDashboardPage = (): ReactElement => {
   return (
     <main className="flex min-h-0 w-full flex-1 flex-col bg-slate-50 [-ms-overflow-style:none] [scrollbar-width:none] dark:bg-zinc-950 [&::-webkit-scrollbar]:hidden">
       {dashboard.operatorCashSessionState === "loading" ? (
-        <div className="flex flex-1 flex-col items-center justify-center py-24">
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Cargando sesión…</p>
-        </div>
+        <OperadorSessionGridSkeleton />
       ) : dashboard.operatorCashSessionState === "noSession" ? (
         <div className="flex flex-1 flex-col items-center justify-center px-4 py-12">
           <div className="w-full max-w-md rounded-2xl border border-white/25 bg-white/85 p-8 shadow-2xl ring-1 ring-black/5 dark:border-white/10 dark:bg-zinc-900/80 md:p-10">

@@ -10,6 +10,7 @@ import type {
   CatalogBrowseMode,
   OperatorCashSessionState,
   OperatorCloseCashSummaryPayload,
+  OperatorOpenSessionBasicsPayload,
   ProductsApiResponse,
   RecentSalesHistoryApiResponse,
   RecentSaleHistoryRecord,
@@ -25,8 +26,10 @@ import {
   MISSING_OPEN_SESSION_UI_MESSAGE,
 } from "./constants";
 import { isMissingOpenSessionSaleMessage } from "./formatters";
+import { useDashboardSession } from "@/components/layout/dashboard-session-context";
 
 export function useOperadorDashboard() {
+  const { userRole, isProfileReady } = useDashboardSession();
   const previousSaleItemsListLengthReference = useRef<number>(0);
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<SelectedPaymentMethod>("EFECTIVO");
@@ -309,6 +312,9 @@ export function useOperadorDashboard() {
   }, []);
 
   const loadRecentSalesHistory = useCallback(async (): Promise<void> => {
+    if (userRole !== "ADMIN") {
+      return;
+    }
     try {
       const [ventaLibreResponse, recreoResponse, ventaTotalResponse] =
         await Promise.all([
@@ -353,7 +359,19 @@ export function useOperadorDashboard() {
     } catch {
       // Keep UI usable if sales history is unavailable.
     }
-  }, []);
+  }, [userRole]);
+
+  useEffect(() => {
+    if (!isProfileReady) {
+      return;
+    }
+    if (userRole === "ADMIN") {
+      return;
+    }
+    setRecentSalesVentaLibre([]);
+    setRecentSalesRecreo([]);
+    setRecentSalesVentaTotal([]);
+  }, [isProfileReady, userRole]);
 
   const loadOperatorCashSessionStatus = useCallback(async (): Promise<void> => {
     try {
@@ -362,7 +380,7 @@ export function useOperadorDashboard() {
         credentials: "include",
       });
       const responseBody = (await response.json()) as {
-        cashSummary?: OperatorCloseCashSummaryPayload | null;
+        openSession?: OperatorOpenSessionBasicsPayload | null;
         message?: string;
       };
       if (response.status === 401) {
@@ -374,7 +392,7 @@ export function useOperadorDashboard() {
         setProductsCatalog([]);
         return;
       }
-      if (responseBody.cashSummary !== undefined && responseBody.cashSummary !== null) {
+      if (responseBody.openSession !== undefined && responseBody.openSession !== null) {
         setOperatorCashSessionState("hasSession");
       } else {
         setOperatorCashSessionState("noSession");
@@ -558,10 +576,13 @@ export function useOperadorDashboard() {
     setPhysicalCashInput("");
     setIsLoadingCashSummary(true);
     try {
-      const response = await fetch("/api/sales-sessions/cash-summary", {
-        method: "GET",
-        credentials: "include",
-      });
+      const response = await fetch(
+        "/api/sales-sessions/cash-summary?includeArqueo=true",
+        {
+          method: "GET",
+          credentials: "include",
+        },
+      );
       const responseBody = (await response.json()) as {
         cashSummary?: OperatorCloseCashSummaryPayload | null;
         message?: string;
@@ -860,13 +881,17 @@ export function useOperadorDashboard() {
       return;
     }
     void loadProductsCatalog();
-    void loadRecentSalesHistory();
+    if (isProfileReady && userRole === "ADMIN") {
+      void loadRecentSalesHistory();
+    }
     void loadRecreoBreakDisplay();
   }, [
     operatorCashSessionState,
     loadProductsCatalog,
     loadRecentSalesHistory,
     loadRecreoBreakDisplay,
+    isProfileReady,
+    userRole,
   ]);
 
   useEffect(() => {
@@ -882,24 +907,35 @@ export function useOperadorDashboard() {
       return;
     }
 
-    const realtimeChannel = supabaseClient
+    const productsChannel = supabaseClient
       .channel("operador-products-sales")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "products" },
         () => void loadProductsCatalog(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "sales" },
-        () => void loadRecentSalesHistory(),
-      )
-      .subscribe();
+      );
+
+    const realtimeChannel =
+      isProfileReady && userRole === "ADMIN"
+        ? productsChannel.on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "sales" },
+            () => void loadRecentSalesHistory(),
+          )
+        : productsChannel;
+
+    realtimeChannel.subscribe();
 
     return () => {
       void supabaseClient.removeChannel(realtimeChannel);
     };
-  }, [operatorCashSessionState, loadProductsCatalog, loadRecentSalesHistory]);
+  }, [
+    operatorCashSessionState,
+    loadProductsCatalog,
+    loadRecentSalesHistory,
+    isProfileReady,
+    userRole,
+  ]);
 
   useEffect(() => {
     if (!isBreakActive) {
