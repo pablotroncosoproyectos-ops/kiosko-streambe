@@ -28,6 +28,27 @@ Desde **`/login`** o la raíz **`/`**, un usuario con sesión válida es redirig
 - **Cambio de contraseña obligatorio:** si aplica según la política de la cuenta, el sistema puede exigir la ruta **`/auth/cambiar-contrasena-obligatoria`** antes de permitir el uso del panel.
 - **Recuperación de contraseña:** el usuario puede solicitar enlace desde la pantalla de login; el retorno del flujo utiliza **`/auth/callback`** y, tras intercambiar el código por sesión, la aplicación permite definir una nueva contraseña en **`/auth/reset-password`**.
 
+### 1.4 Recuperación de Contraseña
+
+#### 1.4.1 Método Público (Autogestión)
+
+1. El usuario accede a la pantalla de **`/login`** y utiliza el enlace **"¿Olvidaste tu contraseña?"**.
+2. La aplicación solicita el correo de recuperación y dispara el envío del enlace de restablecimiento mediante la integración con **Supabase Auth**.
+3. Este flujo está orientado a la autogestión del acceso por parte del propio usuario final.
+
+#### 1.4.2 Método Administrativo (Gestión Interna)
+
+1. Un usuario con rol **ADMIN** puede abrir el modal de **Gestión de Usuarios** desde el panel administrativo.
+2. Desde esa vista, el administrador puede iniciar la recuperación para un usuario específico mediante el botón **"Reset"**, que dispara el envío del correo de recuperación.
+3. Por seguridad operativa y control de rate limit, este método aplica un **cooldown local de 60 segundos** entre intentos para el mismo usuario.
+
+#### 1.4.3 Proceso de Validación y Redirección
+
+1. En ambos métodos, el sistema envía un correo electrónico con un **enlace único de un solo uso** para continuar el restablecimiento.
+2. Al abrir el enlace, la aplicación procesa la sesión de manera segura a través de **`/auth/callback`**, contemplando tanto el flujo **PKCE** (parámetros en query) como parámetros implícitos en **hash (`#`)**.
+3. Para mejorar la experiencia y evitar rebotes innecesarios al login, se muestra una pantalla de transición **"Procesando acceso seguro..."** mientras se consolida la sesión.
+4. Completada la validación, el usuario es dirigido de forma automática al formulario de nueva contraseña en **`/auth/reset-password`**.
+
 ---
 
 ## 2. Rol Operador
